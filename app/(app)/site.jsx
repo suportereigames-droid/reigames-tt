@@ -8,6 +8,8 @@ const BUCKET = 'product-images'
 
 export default function Site() {
   const [logoUrl, setLogoUrl] = useState('')
+  const [rodape, setRodape] = useState({ ano_fundacao: '' })
+  const [salvandoRodape, setSalvandoRodape] = useState(false)
   const [enviandoLogo, setEnviandoLogo] = useState(false)
   const [paginas, setPaginas] = useState([])
   const [editando, setEditando] = useState(null)
@@ -21,13 +23,16 @@ export default function Site() {
   const [novaSubcategoria, setNovaSubcategoria] = useState('')
 
   const load = useCallback(async () => {
-    const [{ data: settings }, { data: pages }, { data: cats }, { data: subs }] = await Promise.all([
-      supabase.from('site_settings').select('logo_url').single(),
+    const [{ data: settings }, { data: pages }, { data: cats, error: catsError }, { data: subs, error: subsError }] = await Promise.all([
+      supabase.from('site_settings').select('logo_url, ano_fundacao').single(),
       supabase.from('site_pages').select('*').order('sort_order'),
       supabase.from('categories').select('*').order('sort_order'),
       supabase.from('subcategories').select('*').order('sort_order')
     ])
+    if (catsError) Alert.alert('Erro ao carregar categorias', catsError.message)
+    if (subsError) Alert.alert('Erro ao carregar subcategorias', subsError.message)
     setLogoUrl(settings?.logo_url || '')
+    setRodape({ ano_fundacao: settings?.ano_fundacao ? String(settings.ano_fundacao) : '' })
     setPaginas(pages || [])
     setCategorias(cats || [])
     const agrupado = {}
@@ -72,6 +77,20 @@ export default function Site() {
     } finally {
       setEnviandoLogo(false)
     }
+  }
+
+  async function salvarRodape() {
+    setSalvandoRodape(true)
+    const { error } = await supabase
+      .from('site_settings')
+      .update({ ano_fundacao: rodape.ano_fundacao ? Number(rodape.ano_fundacao) : null })
+      .eq('id', true)
+    setSalvandoRodape(false)
+    if (error) {
+      Alert.alert('Não foi possível salvar', error.message)
+      return
+    }
+    Alert.alert('Salvo!')
   }
 
   function abrirEdicao(pagina) {
@@ -205,6 +224,28 @@ export default function Site() {
       {logoUrl ? <Image source={{ uri: logoUrl }} style={styles.logoPreview} resizeMode="contain" /> : null}
       <Pressable style={styles.saveBtnSmall} onPress={escolherLogo} disabled={enviandoLogo}>
         <Text style={styles.saveBtnText}>{enviandoLogo ? 'Enviando...' : logoUrl ? 'Trocar logo' : 'Escolher logo da galeria'}</Text>
+      </Pressable>
+
+      <View style={styles.divider} />
+
+      <Text style={styles.title}>Rodapé do site</Text>
+      <Text style={styles.hint}>
+        O WhatsApp e o Instagram do rodapé/botão flutuante vêm do seu perfil (aba Perfil) — mude por lá.
+      </Text>
+
+      <Text style={styles.label}>Ano de fundação</Text>
+      <TextInput
+        style={styles.input}
+        value={rodape.ano_fundacao}
+        onChangeText={(v) => setRodape({ ano_fundacao: v.replace(/\D/g, '') })}
+        placeholder="2023"
+        placeholderTextColor="#8B93A7"
+        keyboardType="number-pad"
+      />
+      <Text style={styles.hint}>Vai aparecer tipo "© 2023–2026" no rodapé, em vez de só o ano atual.</Text>
+
+      <Pressable style={styles.saveBtnSmall} onPress={salvarRodape} disabled={salvandoRodape}>
+        <Text style={styles.saveBtnText}>{salvandoRodape ? 'Salvando...' : 'Salvar rodapé'}</Text>
       </Pressable>
 
       <View style={styles.divider} />

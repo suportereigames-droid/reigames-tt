@@ -5,16 +5,18 @@ import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 
 export default function Perfil() {
-  const { user, profile } = useAuth()
+  const { user, profile, isAdmin } = useAuth()
   const [nome, setNome] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [instagramUrl, setInstagramUrl] = useState('')
   const [salvando, setSalvando] = useState(false)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('full_name, whatsapp').eq('id', user.id).single()
+    const { data } = await supabase.from('profiles').select('full_name, whatsapp, instagram_url').eq('id', user.id).single()
     if (data) {
       setNome(data.full_name || '')
       setWhatsapp(data.whatsapp || '')
+      setInstagramUrl(data.instagram_url || '')
     }
   }, [user?.id])
 
@@ -22,7 +24,9 @@ export default function Perfil() {
 
   async function salvar() {
     setSalvando(true)
-    const { error } = await supabase.from('profiles').update({ full_name: nome, whatsapp }).eq('id', user.id)
+    const payload = { full_name: nome, whatsapp }
+    if (isAdmin) payload.instagram_url = instagramUrl
+    const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)
     setSalvando(false)
     if (error) {
       Alert.alert('Não foi possível salvar', 'Tente novamente.')
@@ -54,6 +58,28 @@ export default function Perfil() {
       <Pressable style={styles.saveBtn} onPress={salvar} disabled={salvando}>
         <Text style={styles.saveBtnText}>{salvando ? 'Salvando...' : 'Salvar'}</Text>
       </Pressable>
+
+      {isAdmin && (
+        <>
+          <Text style={[styles.subtitle, { marginTop: 24 }]}>
+            Só você (admin) vê isso — o WhatsApp e o Instagram daqui aparecem no rodapé e no botão flutuante do site inteiro.
+          </Text>
+
+          <Text style={styles.label}>Link do Instagram da loja</Text>
+          <TextInput
+            style={styles.input}
+            value={instagramUrl}
+            onChangeText={setInstagramUrl}
+            placeholder="https://instagram.com/reigames"
+            placeholderTextColor="#8B93A7"
+            autoCapitalize="none"
+          />
+
+          <Pressable style={styles.saveBtn} onPress={salvar} disabled={salvando}>
+            <Text style={styles.saveBtnText}>{salvando ? 'Salvando...' : 'Salvar'}</Text>
+          </Pressable>
+        </>
+      )}
     </ScrollView>
   )
 }
