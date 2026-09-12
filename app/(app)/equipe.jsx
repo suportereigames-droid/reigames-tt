@@ -10,14 +10,16 @@ export default function Equipe() {
   const load = useCallback(async () => {
     const { data: perfis } = await supabase.from('profiles').select('id, full_name, role').order('full_name')
     const { data: produtos } = await supabase.from('products').select('created_by, status')
+    const { data: pedidos } = await supabase.from('orders').select('seller_id, status').eq('status', 'pago')
 
     const resumo = (perfis || []).map((p) => {
       const dele = (produtos || []).filter((pr) => pr.created_by === p.id)
+      const vendasDele = (pedidos || []).filter((o) => o.seller_id === p.id)
       return {
         ...p,
         total: dele.length,
         disponivel: dele.filter((pr) => pr.status === 'disponivel').length,
-        vendido: dele.filter((pr) => pr.status === 'vendido').length
+        vendido: vendasDele.length
       }
     })
     setMembros(resumo)
