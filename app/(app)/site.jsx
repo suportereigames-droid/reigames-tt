@@ -1,10 +1,14 @@
 import { useCallback, useState } from 'react'
-import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert } from 'react-native'
+import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
 import { useFocusEffect } from 'expo-router'
+import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase.js'
+
+const BUCKET = 'product-images'
 
 export default function Site() {
   const [logoUrl, setLogoUrl] = useState('')
+  const [enviandoLogo, setEnviandoLogo] = useState(false)
   const [paginas, setPaginas] = useState([])
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', show_in_menu: true })
@@ -21,9 +25,38 @@ export default function Site() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
-  async function salvarLogo() {
-    await supabase.from('site_settings').update({ logo_url: logoUrl }).eq('id', true)
-    Alert.alert('Logo atualizada!')
+  async function escolherLogo() {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permissao.granted) {
+      Alert.alert('Precisamos de permissão para acessar suas fotos.')
+      return
+    }
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9
+    })
+    if (resultado.canceled) return
+
+    setEnviandoLogo(true)
+    try {
+      const asset = resultado.assets[0]
+      const extensao = (asset.uri.split('.').pop() || 'png').split('?')[0]
+      const path = `logo/${Date.now()}.${extensao}`
+      const resposta = await fetch(asset.uri)
+      const arrayBuffer = await resposta.arrayBuffer()
+      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
+        contentType: asset.mimeType || 'image/png'
+      })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+      await supabase.from('site_settings').update({ logo_url: data.publicUrl }).eq('id', true)
+      setLogoUrl(data.publicUrl)
+      Alert.alert('Logo atualizada!')
+    } catch (err) {
+      Alert.alert('Não foi possível enviar a logo', 'Tente novamente.')
+    } finally {
+      setEnviandoLogo(false)
+    }
   }
 
   function abrirEdicao(pagina) {
@@ -106,15 +139,9 @@ export default function Site() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
       <Text style={styles.title}>Logo do site</Text>
-      <TextInput
-        style={styles.input}
-        value={logoUrl}
-        onChangeText={setLogoUrl}
-        placeholder="Link direto da imagem da logo"
-        placeholderTextColor="#8B93A7"
-      />
-      <Pressable style={styles.saveBtnSmall} onPress={salvarLogo}>
-        <Text style={styles.saveBtnText}>Salvar logo</Text>
+      {logoUrl ? <Image source={{ uri: logoUrl }} style={styles.logoPreview} resizeMode="contain" /> : null}
+      <Pressable style={styles.saveBtnSmall} onPress={escolherLogo} disabled={enviandoLogo}>
+        <Text style={styles.saveBtnText}>{enviandoLogo ? 'Enviando...' : logoUrl ? 'Trocar logo' : 'Escolher logo da galeria'}</Text>
       </Pressable>
 
       <View style={styles.divider} />
@@ -148,6 +175,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#1D212C', borderColor: '#2A2F3B', borderWidth: 1, borderRadius: 8, color: '#FFFFFF', padding: 12 },
   saveBtn: { backgroundColor: '#E7B94C', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 24 },
   saveBtnSmall: { backgroundColor: '#E7B94C', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 10 },
+  logoPreview: { width: '100%', height: 80, marginBottom: 4 },
   saveBtnText: { color: '#0F1115', fontWeight: '700' },
   divider: { height: 1, backgroundColor: '#2A2F3B', marginVertical: 24 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
