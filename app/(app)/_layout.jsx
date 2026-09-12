@@ -35,6 +35,7 @@ export default function AppLayout() {
       <Tabs.Screen name="produtos/novo" options={{ href: null, title: 'Nova conta' }} />
       <Tabs.Screen name="produtos/[id]" options={{ href: null, title: 'Editar conta' }} />
       <Tabs.Screen name="equipe" options={{ href: isAdmin ? undefined : null, title: 'Equipe' }} />
+      <Tabs.Screen name="site" options={{ href: isAdmin ? undefined : null, title: 'Site' }} />
     </Tabs>
   )
 }
