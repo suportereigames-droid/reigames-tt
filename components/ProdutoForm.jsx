@@ -17,8 +17,7 @@ export default function ProdutoForm({ id }) {
   const [form, setForm] = useState({
     game: GAMES[0], title: '', description: '', price: '', whatsapp: '', status: 'disponivel'
   })
-  const [media, setMedia] = useState([])
-  const [novosArquivos, setNovosArquivos] = useState([])
+  const [itens, setItens] = useState([])
   const [carregando, setCarregando] = useState(isEditing)
   const [salvando, setSalvando] = useState(false)
   const [enviandoMidia, setEnviandoMidia] = useState(false)
@@ -31,7 +30,7 @@ export default function ProdutoForm({ id }) {
           game: data.game, title: data.title, description: data.description,
           price: String(data.price), whatsapp: data.whatsapp || '', status: data.status
         })
-        setMedia(data.media || [])
+        setItens((data.media || []).map((m) => ({ id: m.path, kind: 'existente', type: m.type, path: m.path, url: m.url })))
       }
       setCarregando(false)
     })
@@ -49,36 +48,32 @@ export default function ProdutoForm({ id }) {
       quality: 0.8
     })
     if (!resultado.canceled) {
-      setNovosArquivos((prev) => [...prev, ...resultado.assets])
+      const novos = resultado.assets.map((asset) => ({
+        id: `novo-${Date.now()}-${Math.random()}`,
+        kind: 'novo',
+        type: asset.type === 'video' ? 'video' : 'image',
+        asset,
+        url: asset.uri
+      }))
+      setItens((prev) => [...prev, ...novos])
     }
   }
 
-  function removerNovoArquivo(index) {
-    setNovosArquivos((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  async function removerMidiaSalva(index) {
-    const item = media[index]
-    await supabase.storage.from(BUCKET).remove([item.path])
-    setMedia((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  async function enviarNovosArquivos() {
-    const enviados = []
-    for (const asset of novosArquivos) {
-      const tipo = asset.type === 'video' ? 'video' : 'image'
-      const extensao = (asset.uri.split('.').pop() || (tipo === 'video' ? 'mp4' : 'jpg')).split('?')[0]
-      const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensao}`
-      const resposta = await fetch(asset.uri)
-      const arrayBuffer = await resposta.arrayBuffer()
-      const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
-        contentType: asset.mimeType || (tipo === 'video' ? 'video/mp4' : 'image/jpeg')
-      })
-      if (error) throw error
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-      enviados.push({ type: tipo, path, url: data.publicUrl })
+  async function removerItem(item) {
+    if (item.kind === 'existente') {
+      await supabase.storage.from(BUCKET).remove([item.path])
     }
-    return enviados
+    setItens((prev) => prev.filter((i) => i.id !== item.id))
+  }
+
+  function moverItem(index, direcao) {
+    setItens((prev) => {
+      const nova = [...prev]
+      const destino = index + direcao
+      if (destino < 0 || destino >= nova.length) return prev
+      ;[nova[index], nova[destino]] = [nova[destino], nova[index]]
+      return nova
+    })
   }
 
   async function salvar() {
@@ -87,13 +82,30 @@ export default function ProdutoForm({ id }) {
       return
     }
     setSalvando(true)
-    setEnviandoMidia(novosArquivos.length > 0)
+    setEnviandoMidia(itens.some((i) => i.kind === 'novo'))
     try {
-      const enviados = await enviarNovosArquivos()
+      const mediaFinal = []
+      for (const item of itens) {
+        if (item.kind === 'existente') {
+          mediaFinal.push({ type: item.type, path: item.path, url: item.url })
+        } else {
+          const extensao = (item.asset.uri.split('.').pop() || (item.type === 'video' ? 'mp4' : 'jpg')).split('?')[0]
+          const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensao}`
+          const resposta = await fetch(item.asset.uri)
+          const arrayBuffer = await resposta.arrayBuffer()
+          const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
+            contentType: item.asset.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
+          })
+          if (error) throw error
+          const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+          mediaFinal.push({ type: item.type, path, url: data.publicUrl })
+        }
+      }
+
       const payload = {
         game: form.game, title: form.title, description: form.description,
         price: Number(form.price), whatsapp: form.whatsapp, status: form.status,
-        media: [...media, ...enviados]
+        media: mediaFinal
       }
       const { error } = isEditing
         ? await supabase.from('products').update(payload).eq('id', id)
@@ -148,36 +160,35 @@ export default function ProdutoForm({ id }) {
       </View>
 
       <Text style={styles.label}>Fotos e vídeos</Text>
+      <Text style={styles.hint}>A primeira é a capa do anúncio. Use as setinhas pra mudar a ordem.</Text>
       <View style={styles.midiaRow}>
-        {media.map((m, i) => (
-          <View key={`salvo-${i}`} style={styles.midiaItem}>
-            {m.type === 'video' ? (
+        {itens.map((item, i) => (
+          <View key={item.id} style={styles.midiaItem}>
+            {item.type === 'video' ? (
               <View style={[styles.thumb, styles.videoThumb]}><Text style={{ color: '#8B93A7', fontSize: 10 }}>VÍDEO</Text></View>
             ) : (
-              <Image source={{ uri: m.url }} style={styles.thumb} />
+              <Image source={{ uri: item.url }} style={styles.thumb} resizeMode="cover" />
             )}
-            <Pressable style={styles.removerBtn} onPress={() => removerMidiaSalva(i)}>
+            {i === 0 && (
+              <View style={styles.capaBadge}><Text style={styles.capaBadgeTexto}>CAPA</Text></View>
+            )}
+            <Pressable style={styles.removerBtn} onPress={() => removerItem(item)}>
               <Text style={styles.removerBtnText}>✕</Text>
             </Pressable>
-          </View>
-        ))}
-        {novosArquivos.map((a, i) => (
-          <View key={`novo-${i}`} style={styles.midiaItem}>
-            {a.type === 'video' ? (
-              <View style={[styles.thumb, styles.videoThumb]}><Text style={{ color: '#E7B94C', fontSize: 10 }}>NOVO VÍDEO</Text></View>
-            ) : (
-              <Image source={{ uri: a.uri }} style={styles.thumb} />
-            )}
-            <Pressable style={styles.removerBtn} onPress={() => removerNovoArquivo(i)}>
-              <Text style={styles.removerBtnText}>✕</Text>
-            </Pressable>
+            <View style={styles.moverRow}>
+              <Pressable disabled={i === 0} onPress={() => moverItem(i, -1)} style={styles.moverBtn}>
+                <Text style={[styles.moverTexto, i === 0 && styles.moverDesabilitado]}>◀</Text>
+              </Pressable>
+              <Pressable disabled={i === itens.length - 1} onPress={() => moverItem(i, 1)} style={styles.moverBtn}>
+                <Text style={[styles.moverTexto, i === itens.length - 1 && styles.moverDesabilitado]}>▶</Text>
+              </Pressable>
+            </View>
           </View>
         ))}
         <Pressable style={styles.addMidiaBtn} onPress={escolherMidia}>
           <Text style={{ color: '#E7B94C', fontSize: 24 }}>+</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>Toque no + para escolher fotos ou vídeos da galeria (pode escolher vários juntos).</Text>
 
       <Pressable style={styles.saveBtn} onPress={salvar} disabled={salvando}>
         <Text style={styles.saveBtnText}>
@@ -191,6 +202,7 @@ export default function ProdutoForm({ id }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#0F1115' },
   label: { color: '#8B93A7', fontSize: 12, textTransform: 'uppercase', marginTop: 16, marginBottom: 6 },
+  hint: { color: '#8B93A7', fontSize: 11, marginBottom: 8 },
   input: { backgroundColor: '#1D212C', borderColor: '#2A2F3B', borderWidth: 1, borderRadius: 8, color: '#FFFFFF', padding: 12 },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1, borderColor: '#2A2F3B', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
@@ -198,13 +210,18 @@ const styles = StyleSheet.create({
   chipText: { color: '#8B93A7', fontSize: 12 },
   chipTextActive: { color: '#0F1115', fontWeight: '700' },
   midiaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  midiaItem: { position: 'relative' },
-  thumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#1D212C' },
+  midiaItem: { position: 'relative', width: 84 },
+  thumb: { width: 84, height: 84, borderRadius: 8, backgroundColor: '#1D212C' },
   videoThumb: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A2F3B' },
+  capaBadge: { position: 'absolute', left: 4, top: 4, backgroundColor: '#E7B94C', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  capaBadgeTexto: { color: '#0F1115', fontSize: 9, fontWeight: '700' },
   removerBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: '#0F1115', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   removerBtnText: { color: '#E8562F', fontSize: 12 },
-  addMidiaBtn: { width: 72, height: 72, borderRadius: 8, borderWidth: 1, borderColor: '#E7B94C', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  hint: { color: '#8B93A7', fontSize: 11, marginTop: 8 },
+  moverRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  moverBtn: { paddingHorizontal: 6, paddingVertical: 2 },
+  moverTexto: { color: '#E7B94C', fontSize: 14 },
+  moverDesabilitado: { color: '#2A2F3B' },
+  addMidiaBtn: { width: 84, height: 84, borderRadius: 8, borderWidth: 1, borderColor: '#E7B94C', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   saveBtn: { backgroundColor: '#E7B94C', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 28, marginBottom: 40 },
   saveBtnText: { color: '#0F1115', fontWeight: '700', fontSize: 16 }
 })
