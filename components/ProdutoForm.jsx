@@ -5,39 +5,71 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 
-const GAMES = ['EFOOTBALL', 'Clash of Clans', 'Clash Royale', 'Brawl Stars', 'Hay Day', 'Wartune Ultra']
 const STATUS = ['disponivel', 'reservado', 'vendido', 'oculto']
 const BUCKET = 'product-images'
-
-// Cada item de "itens": { id, kind: 'existente'|'novo', type, path?, url, asset? }
-// A ordem do array é a ordem final do anúncio — o primeiro é a capa.
 
 export default function ProdutoForm({ id }) {
   const { user } = useAuth()
   const router = useRouter()
   const isEditing = Boolean(id)
 
+  const [categorias, setCategorias] = useState([])
+  const [subcategorias, setSubcategorias] = useState([])
   const [form, setForm] = useState({
-    game: GAMES[0], title: '', description: '', price: '', cost: '', status: 'disponivel'
+    game: '', category_id: '', subcategory: '', title: '', description: '', price: '', cost: '', status: 'disponivel'
   })
   const [itens, setItens] = useState([])
-  const [carregando, setCarregando] = useState(isEditing)
+  const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [enviandoMidia, setEnviandoMidia] = useState(false)
 
   useEffect(() => {
-    if (!isEditing) return
-    supabase.from('products').select('*').eq('id', id).single().then(({ data }) => {
-      if (data) {
-        setForm({
-          game: data.game, title: data.title, description: data.description,
-          price: String(data.price), cost: data.cost != null ? String(data.cost) : '', status: data.status
-        })
-        setItens((data.media || []).map((m) => ({ id: m.path, kind: 'existente', type: m.type, path: m.path, url: m.url })))
+    async function carregar() {
+      const { data: cats, error: catsError } = await supabase.from('categories').select('*').order('sort_order')
+      if (catsError) Alert.alert('Erro ao carregar categorias', catsError.message)
+      setCategorias(cats || [])
+
+      if (isEditing) {
+        const { data } = await supabase.from('products').select('*').eq('id', id).single()
+        if (data) {
+          // Produto antigo só guarda o nome da categoria (texto) — aqui a
+          // gente acha o ID correspondente só nesse momento de abrir a tela.
+          const categoriaDoProduto = (cats || []).find((c) => c.name === data.game)
+          setForm({
+            game: data.game,
+            category_id: categoriaDoProduto?.id || '',
+            subcategory: data.subcategory || '',
+            title: data.title,
+            description: data.description,
+            price: String(data.price),
+            cost: data.cost != null ? String(data.cost) : '',
+            status: data.status
+          })
+          setItens((data.media || []).map((m) => ({ id: m.path, kind: 'existente', type: m.type, path: m.path, url: m.url })))
+        }
+      } else if (cats?.length) {
+        setForm((f) => ({ ...f, game: cats[0].name, category_id: cats[0].id }))
       }
       setCarregando(false)
-    })
+    }
+    carregar()
   }, [id])
+
+  useEffect(() => {
+    if (!form.category_id) {
+      setSubcategorias([])
+      return
+    }
+    supabase
+      .from('subcategories')
+      .select('*')
+      .eq('category_id', form.category_id)
+      .order('sort_order')
+      .then(({ data, error }) => {
+        if (error) Alert.alert('Erro ao carregar subcategorias', error.message)
+        setSubcategorias(data || [])
+      })
+  }, [form.category_id])
 
   async function escolherMidia() {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -80,8 +112,8 @@ export default function ProdutoForm({ id }) {
   }
 
   async function salvar() {
-    if (!form.title || !form.price) {
-      Alert.alert('Preencha ao menos o título e o preço.')
+    if (!form.title || !form.price || !form.game) {
+      Alert.alert('Preencha ao menos a categoria, o título e o preço.')
       return
     }
     setSalvando(true)
@@ -106,7 +138,7 @@ export default function ProdutoForm({ id }) {
       }
 
       const payload = {
-        game: form.game, title: form.title, description: form.description,
+        game: form.game, subcategory: form.subcategory || null, title: form.title, description: form.description,
         price: Number(form.price), cost: form.cost ? Number(form.cost) : null, status: form.status,
         media: mediaFinal
       }
@@ -127,14 +159,46 @@ export default function ProdutoForm({ id }) {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
-      <Text style={styles.label}>Jogo</Text>
+      <Text style={styles.label}>Categoria</Text>
       <View style={styles.chipsRow}>
-        {GAMES.map((g) => (
-          <Pressable key={g} onPress={() => setForm({ ...form, game: g })} style={[styles.chip, form.game === g && styles.chipActive]}>
-            <Text style={[styles.chipText, form.game === g && styles.chipTextActive]}>{g}</Text>
+        {categorias.map((c) => (
+          <Pressable
+            key={c.id}
+            onPress={() => setForm({ ...form, game: c.name, category_id: c.id, subcategory: '' })}
+            style={[styles.chip, form.category_id === c.id && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, form.category_id === c.id && styles.chipTextActive]}>{c.name}</Text>
           </Pressable>
         ))}
       </View>
+      {categorias.length === 0 && (
+        <Text style={styles.hint}>Nenhuma categoria cadastrada ainda — crie uma na aba Site.</Text>
+      )}
+
+      <Text style={styles.label}>Subcategoria de "{form.game || '...'}" (opcional)</Text>
+      {subcategorias.length === 0 ? (
+        <Text style={styles.hint}>
+          Essa categoria ainda não tem subcategoria cadastrada. Crie uma na aba Site, dentro de "{form.game}".
+        </Text>
+      ) : (
+        <View style={styles.chipsRow}>
+          <Pressable
+            onPress={() => setForm({ ...form, subcategory: '' })}
+            style={[styles.chip, !form.subcategory && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, !form.subcategory && styles.chipTextActive]}>Nenhuma</Text>
+          </Pressable>
+          {subcategorias.map((s) => (
+            <Pressable
+              key={s.id}
+              onPress={() => setForm({ ...form, subcategory: s.name })}
+              style={[styles.chip, form.subcategory === s.name && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, form.subcategory === s.name && styles.chipTextActive]}>{s.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       <Text style={styles.label}>Título do anúncio</Text>
       <TextInput style={styles.input} value={form.title} onChangeText={(v) => setForm({ ...form, title: v })} placeholderTextColor="#8B93A7" />
