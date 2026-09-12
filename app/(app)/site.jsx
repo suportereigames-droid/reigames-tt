@@ -14,13 +14,28 @@ export default function Site() {
   const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', show_in_menu: true })
   const [salvando, setSalvando] = useState(false)
 
+  const [categorias, setCategorias] = useState([])
+  const [subcategoriasPorCategoria, setSubcategoriasPorCategoria] = useState({})
+  const [categoriaAberta, setCategoriaAberta] = useState(null)
+  const [novaCategoria, setNovaCategoria] = useState('')
+  const [novaSubcategoria, setNovaSubcategoria] = useState('')
+
   const load = useCallback(async () => {
-    const [{ data: settings }, { data: pages }] = await Promise.all([
+    const [{ data: settings }, { data: pages }, { data: cats }, { data: subs }] = await Promise.all([
       supabase.from('site_settings').select('logo_url').single(),
-      supabase.from('site_pages').select('*').order('sort_order')
+      supabase.from('site_pages').select('*').order('sort_order'),
+      supabase.from('categories').select('*').order('sort_order'),
+      supabase.from('subcategories').select('*').order('sort_order')
     ])
     setLogoUrl(settings?.logo_url || '')
     setPaginas(pages || [])
+    setCategorias(cats || [])
+    const agrupado = {}
+    ;(subs || []).forEach((s) => {
+      if (!agrupado[s.category_id]) agrupado[s.category_id] = []
+      agrupado[s.category_id].push(s)
+    })
+    setSubcategoriasPorCategoria(agrupado)
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
@@ -100,6 +115,54 @@ export default function Site() {
     ])
   }
 
+  async function adicionarCategoria() {
+    const nome = novaCategoria.trim()
+    if (!nome) return
+    const { error } = await supabase.from('categories').insert({ name: nome, sort_order: categorias.length })
+    if (error) {
+      Alert.alert('Não foi possível criar', 'Já existe uma categoria com esse nome?')
+      return
+    }
+    setNovaCategoria('')
+    load()
+  }
+
+  async function excluirCategoria(categoria) {
+    Alert.alert(
+      `Apagar "${categoria.name}"?`,
+      'As subcategorias dela também somem. Contas já cadastradas continuam existindo, só não vão mais achar essa categoria na lista.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar', style: 'destructive', onPress: async () => {
+            await supabase.from('categories').delete().eq('id', categoria.id)
+            load()
+          }
+        }
+      ]
+    )
+  }
+
+  async function adicionarSubcategoria(categoriaId) {
+    const nome = novaSubcategoria.trim()
+    if (!nome) return
+    const atuais = subcategoriasPorCategoria[categoriaId] || []
+    const { error } = await supabase
+      .from('subcategories')
+      .insert({ category_id: categoriaId, name: nome, sort_order: atuais.length })
+    if (error) {
+      Alert.alert('Não foi possível criar', 'Já existe essa subcategoria aqui?')
+      return
+    }
+    setNovaSubcategoria('')
+    load()
+  }
+
+  async function excluirSubcategoria(id) {
+    await supabase.from('subcategories').delete().eq('id', id)
+    load()
+  }
+
   if (editando) {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
@@ -146,6 +209,70 @@ export default function Site() {
 
       <View style={styles.divider} />
 
+      <Text style={styles.title}>Categorias e subcategorias</Text>
+      <Text style={styles.hint}>
+        Toca numa categoria pra ver/editar as subcategorias dela. Usadas no cadastro de contas e nos filtros do site.
+      </Text>
+
+      <View style={styles.addRow}>
+        <TextInput
+          style={[styles.input, { flex: 1 }]}
+          value={novaCategoria}
+          onChangeText={setNovaCategoria}
+          placeholder="Nova categoria (ex: EFOOTBALL)"
+          placeholderTextColor="#8B93A7"
+        />
+        <Pressable style={styles.addBtn} onPress={adicionarCategoria}>
+          <Text style={styles.addBtnText}>+</Text>
+        </Pressable>
+      </View>
+
+      {categorias.map((cat) => (
+        <View key={cat.id} style={styles.categoriaBloco}>
+          <Pressable
+            style={styles.categoriaHeader}
+            onPress={() => setCategoriaAberta(categoriaAberta === cat.id ? null : cat.id)}
+          >
+            <Text style={styles.categoriaNome}>{cat.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Text style={{ color: '#8B93A7', fontSize: 12 }}>
+                {(subcategoriasPorCategoria[cat.id] || []).length} subcategoria(s)
+              </Text>
+              <Pressable onPress={() => excluirCategoria(cat)}>
+                <Text style={{ color: '#E8562F' }}>Apagar</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+
+          {categoriaAberta === cat.id && (
+            <View style={styles.subcategoriaArea}>
+              {(subcategoriasPorCategoria[cat.id] || []).map((sub) => (
+                <View key={sub.id} style={styles.subcategoriaLinha}>
+                  <Text style={{ color: '#FFFFFF' }}>{sub.name}</Text>
+                  <Pressable onPress={() => excluirSubcategoria(sub.id)}>
+                    <Text style={{ color: '#E8562F', fontSize: 12 }}>Remover</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <View style={styles.addRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={novaSubcategoria}
+                  onChangeText={setNovaSubcategoria}
+                  placeholder="Nova subcategoria"
+                  placeholderTextColor="#8B93A7"
+                />
+                <Pressable style={styles.addBtn} onPress={() => adicionarSubcategoria(cat.id)}>
+                  <Text style={styles.addBtnText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
+      ))}
+
+      <View style={styles.divider} />
+
       <View style={styles.rowBetween}>
         <Text style={styles.title}>Páginas do menu</Text>
         <Pressable onPress={() => abrirEdicao('nova')}>
@@ -171,6 +298,7 @@ export default function Site() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#0F1115' },
   title: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  hint: { color: '#8B93A7', fontSize: 12, marginTop: -8, marginBottom: 12 },
   label: { color: '#8B93A7', fontSize: 12, textTransform: 'uppercase', marginTop: 14, marginBottom: 6 },
   input: { backgroundColor: '#1D212C', borderColor: '#2A2F3B', borderWidth: 1, borderRadius: 8, color: '#FFFFFF', padding: 12 },
   saveBtn: { backgroundColor: '#E7B94C', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 24 },
@@ -186,5 +314,19 @@ const styles = StyleSheet.create({
   },
   checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
   checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: '#8B93A7' },
-  checkboxOn: { backgroundColor: '#E7B94C', borderColor: '#E7B94C' }
+  checkboxOn: { backgroundColor: '#E7B94C', borderColor: '#E7B94C' },
+  addRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  addBtn: { backgroundColor: '#E7B94C', borderRadius: 8, width: 44, alignItems: 'center', justifyContent: 'center' },
+  addBtnText: { color: '#0F1115', fontWeight: '700', fontSize: 18 },
+  categoriaBloco: {
+    backgroundColor: '#161922', borderColor: '#2A2F3B', borderWidth: 1,
+    borderRadius: 10, marginBottom: 8, overflow: 'hidden'
+  },
+  categoriaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
+  categoriaNome: { color: '#FFFFFF', fontWeight: '600' },
+  subcategoriaArea: { borderTopWidth: 1, borderTopColor: '#2A2F3B', padding: 14 },
+  subcategoriaLinha: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#2A2F3B'
+  }
 })
