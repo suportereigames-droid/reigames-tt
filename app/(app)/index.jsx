@@ -28,7 +28,7 @@ export default function Dashboard() {
   const router = useRouter()
   const [periodo, setPeriodo] = useState('7dias')
   const [stats, setStats] = useState({
-    pedidosAbertos: 0, disponivel: 0, vendido: 0, faturado: 0, visitas: 0, porJogo: []
+    pedidosAbertos: 0, disponivel: 0, vendido: 0, faturado: 0, visitas: 0, porJogo: [], vendasPorJogo: []
   })
   const [onlineAgora, setOnlineAgora] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -36,7 +36,7 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     const corte = dataCorte(periodo)
 
-    let pedidosQuery = supabase.from('orders').select('status, amount, created_at')
+    let pedidosQuery = supabase.from('orders').select('status, amount, created_at, product_game')
     if (corte) pedidosQuery = pedidosQuery.gte('created_at', corte)
 
     const [{ data: produtos }, { data: pedidos }, visitas] = await Promise.all([
@@ -52,9 +52,23 @@ export default function Dashboard() {
     ])
 
     const disponivel = produtos?.filter((p) => p.status === 'disponivel').length || 0
-    const vendido = produtos?.filter((p) => p.status === 'vendido').length || 0
-    const faturado = pedidos?.filter((p) => p.status === 'pago').reduce((s, p) => s + Number(p.amount), 0) || 0
+    // "Vendido" agora vem dos PEDIDOS pagos, não do status da conta — assim
+    // continua correto mesmo que o anúncio seja apagado depois da venda.
+    const pedidosPagos = pedidos?.filter((p) => p.status === 'pago') || []
+    const vendido = pedidosPagos.length
+    const faturado = pedidosPagos.reduce((s, p) => s + Number(p.amount), 0)
     const pedidosAbertos = pedidos?.filter((p) => p.status === 'pendente').length || 0
+
+    const vendasPorJogoMap = {}
+    pedidosPagos.forEach((p) => {
+      const jogo = p.product_game || 'Sem categoria'
+      if (!vendasPorJogoMap[jogo]) vendasPorJogoMap[jogo] = { unidades: 0, valor: 0 }
+      vendasPorJogoMap[jogo].unidades += 1
+      vendasPorJogoMap[jogo].valor += Number(p.amount)
+    })
+    const vendasPorJogo = Object.entries(vendasPorJogoMap)
+      .map(([game, dados]) => ({ game, ...dados }))
+      .sort((a, b) => b.valor - a.valor)
 
     const contagemPorJogo = {}
     produtos?.forEach((p) => {
@@ -65,7 +79,7 @@ export default function Dashboard() {
       .map(([game, total]) => ({ game, total }))
       .sort((a, b) => b.total - a.total)
 
-    setStats({ disponivel, vendido, faturado, visitas: visitas.count || 0, pedidosAbertos, porJogo })
+    setStats({ disponivel, vendido, faturado, visitas: visitas.count || 0, pedidosAbertos, porJogo, vendasPorJogo })
   }, [isAdmin, periodo])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
@@ -135,6 +149,28 @@ export default function Dashboard() {
         <Card label="Contas disponíveis" value={stats.disponivel} color="#28C08A" onPress={() => router.push('/produtos')} />
         <Card label="Contas vendidas" value={stats.vendido} color="#8B93A7" />
       </View>
+
+      {stats.vendasPorJogo.length > 0 && (
+        <View style={styles.porJogoCard}>
+          <Text style={styles.porJogoTitulo}>Vendas por jogo (no período)</Text>
+          {stats.vendasPorJogo.map((item, i) => (
+            <View key={item.game} style={styles.porJogoLinha}>
+              <View style={styles.porJogoTextos}>
+                <Text style={styles.porJogoNome}>{item.game}</Text>
+                <Text style={styles.porJogoNumero}>{item.unidades} vendida{item.unidades > 1 ? 's' : ''} · {money(item.valor)}</Text>
+              </View>
+              <View style={styles.barraFundo}>
+                <View
+                  style={[
+                    styles.barraPreenchida,
+                    { width: `${(item.valor / (stats.vendasPorJogo[0]?.valor || 1)) * 100}%`, backgroundColor: CORES_JOGO[i % CORES_JOGO.length] }
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {stats.porJogo.length > 0 && (
         <View style={styles.porJogoCard}>
