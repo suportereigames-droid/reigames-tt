@@ -120,7 +120,7 @@ export default function Site() {
     if (!nome) return
     const { error } = await supabase.from('categories').insert({ name: nome, sort_order: categorias.length })
     if (error) {
-      Alert.alert('Não foi possível criar', 'Já existe uma categoria com esse nome?')
+      Alert.alert('Não foi possível criar', error.message)
       return
     }
     setNovaCategoria('')
@@ -151,7 +151,7 @@ export default function Site() {
       .from('subcategories')
       .insert({ category_id: categoriaId, name: nome, sort_order: atuais.length })
     if (error) {
-      Alert.alert('Não foi possível criar', 'Já existe essa subcategoria aqui?')
+      Alert.alert('Não foi possível criar', error.message)
       return
     }
     setNovaSubcategoria('')
