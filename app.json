@@ -7,18 +7,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "tt-reigames",
-    "splash": {
-      "backgroundColor": "#0F1115"
-    },
     "android": {
       "package": "br.com.reigames.tt",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F1115"
       },
-      "permissions": [
-        "NOTIFICATIONS"
-      ]
+      "permissions": ["NOTIFICATIONS"]
     },
     "plugins": [
       [
@@ -27,14 +22,7 @@
           "icon": "./assets/notification-icon.png",
           "color": "#E7B94C"
         }
-      ],
-      "expo-router"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "42c51c07-25a9-4450-8ecb-16dd58d1f838"
-      }
-    },
-    "owner": "reigames"
+      ]
+    ]
   }
 }
