@@ -50,6 +50,7 @@ export default function AppLayout() {
         name="site"
         options={{ href: isAdmin ? undefined : null, title: 'Site', tabBarIcon: icone('globe-outline') }}
       />
+      <Tabs.Screen name="perfil" options={{ title: 'Perfil', tabBarIcon: icone('person-circle-outline') }} />
     </Tabs>
   )
 }
