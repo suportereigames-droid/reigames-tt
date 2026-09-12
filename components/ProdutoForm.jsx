@@ -15,7 +15,7 @@ export default function ProdutoForm({ id }) {
   const isEditing = Boolean(id)
 
   const [form, setForm] = useState({
-    game: GAMES[0], title: '', description: '', price: '', whatsapp: '', status: 'disponivel'
+    game: GAMES[0], title: '', description: '', price: '', cost: '', whatsapp: '', status: 'disponivel'
   })
   const [itens, setItens] = useState([])
   const [carregando, setCarregando] = useState(isEditing)
@@ -28,7 +28,7 @@ export default function ProdutoForm({ id }) {
       if (data) {
         setForm({
           game: data.game, title: data.title, description: data.description,
-          price: String(data.price), whatsapp: data.whatsapp || '', status: data.status
+          price: String(data.price), cost: data.cost != null ? String(data.cost) : '', whatsapp: data.whatsapp || '', status: data.status
         })
         setItens((data.media || []).map((m) => ({ id: m.path, kind: 'existente', type: m.type, path: m.path, url: m.url })))
       }
@@ -104,7 +104,7 @@ export default function ProdutoForm({ id }) {
 
       const payload = {
         game: form.game, title: form.title, description: form.description,
-        price: Number(form.price), whatsapp: form.whatsapp, status: form.status,
+        price: Number(form.price), cost: form.cost ? Number(form.cost) : null, whatsapp: form.whatsapp, status: form.status,
         media: mediaFinal
       }
       const { error } = isEditing
@@ -146,6 +146,13 @@ export default function ProdutoForm({ id }) {
 
       <Text style={styles.label}>Preço (R$)</Text>
       <TextInput style={styles.input} keyboardType="decimal-pad" value={form.price} onChangeText={(v) => setForm({ ...form, price: v })} />
+
+      <Text style={styles.label}>Quanto você pagou nessa conta (R$)</Text>
+      <TextInput style={styles.input} keyboardType="decimal-pad" value={form.cost} onChangeText={(v) => setForm({ ...form, cost: v })} placeholderTextColor="#8B93A7" placeholder="opcional" />
+      <Text style={styles.hint}>
+        Só pra seu controle — nunca aparece no site, nem pro comprador, nem pra outros membros da equipe.
+        {form.price && form.cost ? ` Margem atual: R$ ${(Number(form.price) - Number(form.cost)).toFixed(2).replace('.', ',')}` : ''}
+      </Text>
 
       <Text style={styles.label}>WhatsApp para entrega</Text>
       <TextInput style={styles.input} value={form.whatsapp} onChangeText={(v) => setForm({ ...form, whatsapp: v })} />
