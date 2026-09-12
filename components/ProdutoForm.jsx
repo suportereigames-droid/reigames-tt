@@ -189,7 +189,39 @@ export default function ProdutoForm({ id }) {
             </View>
           </View>
         ))}
-        <Pressable style={styles.addMidiaBtn} onPress=
+        <Pressable style={styles.addMidiaBtn} onPress={escolherMidia}>
+          <Text style={{ color: '#E7B94C', fontSize: 24 }}>+</Text>
+        </Pressable>
+      </View>
+
+      <Pressable style={styles.saveBtn} onPress={salvar} disabled={salvando}>
+        <Text style={styles.saveBtnText}>
+          {enviandoMidia ? 'Enviando mídia...' : salvando ? 'Salvando...' : 'Salvar conta'}
+        </Text>
+      </Pressable>
+    </ScrollView>
+  )
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#0F1115' },
+  label: { color: '#8B93A7', fontSize: 12, textTransform: 'uppercase', marginTop: 16, marginBottom: 6 },
+  hint: { color: '#8B93A7', fontSize: 11, marginBottom: 8 },
+  input: { backgroundColor: '#1D212C', borderColor: '#2A2F3B', borderWidth: 1, borderRadius: 8, color: '#FFFFFF', padding: 12 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { borderWidth: 1, borderColor: '#2A2F3B', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
+  chipActive: { backgroundColor: '#E7B94C', borderColor: '#E7B94C' },
+  chipText: { color: '#8B93A7', fontSize: 12 },
+  chipTextActive: { color: '#0F1115', fontWeight: '700' },
+  midiaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  midiaItem: { position: 'relative', width: 84 },
+  thumb: { width: 84, height: 84, borderRadius: 8, backgroundColor: '#1D212C' },
+  videoThumb: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A2F3B' },
+  capaBadge: { position: 'absolute', left: 4, top: 4,
+npx expo-doctor
+
+
+
 cat > components/ProdutoForm.jsx << 'FORMEOF'
 import { useEffect, useState } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
