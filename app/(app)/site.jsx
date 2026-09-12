@@ -102,20 +102,28 @@ export default function Site() {
     setEditando(pagina)
   }
 
+  function gerarSlugValido(texto) {
+    return texto
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // tira acento
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-') // qualquer coisa que não seja letra/número vira hífen
+      .replace(/^-+|-+$/g, '') // tira hífen do início/fim
+  }
+
   async function salvarPagina() {
     if (!form.menu_label || !form.slug) {
       Alert.alert('Preencha o nome e o link da página.')
       return
     }
     setSalvando(true)
-    const slugLimpo = form.slug.trim().toLowerCase().replace(/\s+/g, '-')
+    const slugLimpo = gerarSlugValido(form.slug)
     const payload = { ...form, slug: slugLimpo }
     const { error } = editando === 'nova'
       ? await supabase.from('site_pages').insert(payload)
       : await supabase.from('site_pages').update(payload).eq('id', form.id)
     setSalvando(false)
     if (error) {
-      Alert.alert('Não foi possível salvar', 'Verifique se o link já não está em uso.')
+      Alert.alert('Não foi possível salvar', error.message)
       return
     }
     setEditando(null)
