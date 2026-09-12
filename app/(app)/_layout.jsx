@@ -1,8 +1,13 @@
 import { Redirect } from 'expo-router'
 import { Tabs } from 'expo-router'
 import { View, ActivityIndicator } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useRegisterPushToken } from '../../lib/push.js'
+
+function icone(nome) {
+  return ({ color, size }) => <Ionicons name={nome} size={size} color={color} />
+}
 
 export default function AppLayout() {
   const { session, user, profile, isAdmin, loading } = useAuth()
@@ -28,14 +33,23 @@ export default function AppLayout() {
         tabBarInactiveTintColor: '#8B93A7'
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Início' }} />
-      <Tabs.Screen name="pedidos/index" options={{ title: 'Pedidos' }} />
+      <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: icone('home') }} />
+      <Tabs.Screen name="pedidos/index" options={{ title: 'Pedidos', tabBarIcon: icone('receipt-outline') }} />
       <Tabs.Screen name="pedidos/[id]" options={{ href: null, title: 'Pedido' }} />
-      <Tabs.Screen name="produtos/index" options={{ title: isAdmin ? 'Contas' : 'Minhas contas' }} />
+      <Tabs.Screen
+        name="produtos/index"
+        options={{ title: isAdmin ? 'Contas' : 'Minhas contas', tabBarIcon: icone('game-controller-outline') }}
+      />
       <Tabs.Screen name="produtos/novo" options={{ href: null, title: 'Nova conta' }} />
       <Tabs.Screen name="produtos/[id]" options={{ href: null, title: 'Editar conta' }} />
-      <Tabs.Screen name="equipe" options={{ href: isAdmin ? undefined : null, title: 'Equipe' }} />
-      <Tabs.Screen name="site" options={{ href: isAdmin ? undefined : null, title: 'Site' }} />
+      <Tabs.Screen
+        name="equipe"
+        options={{ href: isAdmin ? undefined : null, title: 'Equipe', tabBarIcon: icone('people-outline') }}
+      />
+      <Tabs.Screen
+        name="site"
+        options={{ href: isAdmin ? undefined : null, title: 'Site', tabBarIcon: icone('globe-outline') }}
+      />
     </Tabs>
   )
 }
