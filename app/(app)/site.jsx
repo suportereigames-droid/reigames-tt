@@ -228,6 +228,11 @@ export default function Site() {
     load()
   }
 
+  async function alternarVisibilidadeCategoriaPagina(categoria) {
+    await supabase.from('page_categories').update({ show_in_menu: !categoria.show_in_menu }).eq('id', categoria.id)
+    load()
+  }
+
   async function excluirCategoriaPagina(categoria) {
     Alert.alert(
       `Apagar "${categoria.name}"?`,
@@ -381,9 +386,15 @@ export default function Site() {
         {categoriasPagina.map((cat) => (
           <View key={cat.id} style={styles.pageCard}>
             <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{cat.name}</Text>
-            <Pressable onPress={() => excluirCategoriaPagina(cat)}>
-              <Text style={{ color: '#E8562F' }}>Apagar</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+              <Pressable style={styles.checkboxRow} onPress={() => alternarVisibilidadeCategoriaPagina(cat)}>
+                <View style={[styles.checkbox, cat.show_in_menu && styles.checkboxOn]} />
+                <Text style={{ color: '#8B93A7', fontSize: 12 }}>No menu</Text>
+              </Pressable>
+              <Pressable onPress={() => excluirCategoriaPagina(cat)}>
+                <Text style={{ color: '#E8562F' }}>Apagar</Text>
+              </Pressable>
+            </View>
           </View>
         ))}
       </ScrollView>
