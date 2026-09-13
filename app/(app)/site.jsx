@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase.js'
 const BUCKET = 'product-images'
 
 export default function Site() {
-  const [secao, setSecao] = useState('menu') // 'menu' | 'configuracoes' | 'categorias' | 'paginas'
+  const [secao, setSecao] = useState('menu') // 'menu' | 'configuracoes' | 'categorias' | 'categorias-pagina' | 'paginas' | 'menu-site'
 
   const [logoUrl, setLogoUrl] = useState('')
   const [rodape, setRodape] = useState({ rodape_texto: '' })
@@ -16,18 +16,24 @@ export default function Site() {
   const [enviandoLogo, setEnviandoLogo] = useState(false)
   const [paginas, setPaginas] = useState([])
   const [editando, setEditando] = useState(null)
-  const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', show_in_menu: true })
+  const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', page_category_id: null })
   const [salvando, setSalvando] = useState(false)
-
-  const [categoriasPagina, setCategoriasPagina] = useState([])
-  const [novaCategoriaPagina, setNovaCategoriaPagina] = useState('')
-  const [categoriaPaginaAberta, setCategoriaPaginaAberta] = useState(null)
 
   const [categorias, setCategorias] = useState([])
   const [subcategoriasPorCategoria, setSubcategoriasPorCategoria] = useState({})
   const [categoriaAberta, setCategoriaAberta] = useState(null)
   const [novaCategoria, setNovaCategoria] = useState('')
   const [novaSubcategoria, setNovaSubcategoria] = useState('')
+
+  const [categoriasPagina, setCategoriasPagina] = useState([])
+  const [novaCategoriaPagina, setNovaCategoriaPagina] = useState('')
+
+  const [itensMenu, setItensMenu] = useState([])
+  const [tipoNovoItem, setTipoNovoItem] = useState('pagina')
+  const [novoItemPagina, setNovoItemPagina] = useState('')
+  const [novoItemCategoria, setNovoItemCategoria] = useState('')
+  const [novoItemLabel, setNovoItemLabel] = useState('')
+  const [novoItemUrl, setNovoItemUrl] = useState('')
 
   const load = useCallback(async () => {
     const [{ data: settings }, { data: pages }, { data: cats, error: catsError }, { data: subs, error: subsError }] = await Promise.all([
@@ -42,14 +48,19 @@ export default function Site() {
     setRodape({ rodape_texto: settings?.rodape_texto || '' })
     setPaginas(pages || [])
     setCategorias(cats || [])
-    const { data: catsPagina } = await supabase.from('page_categories').select('*').order('sort_order')
-    setCategoriasPagina(catsPagina || [])
     const agrupado = {}
     ;(subs || []).forEach((s) => {
       if (!agrupado[s.category_id]) agrupado[s.category_id] = []
       agrupado[s.category_id].push(s)
     })
     setSubcategoriasPorCategoria(agrupado)
+    const { data: catsPagina } = await supabase.from('page_categories').select('*').order('sort_order')
+    setCategoriasPagina(catsPagina || [])
+    const { data: mi } = await supabase
+      .from('menu_items')
+      .select('*, site_pages(menu_label), page_categories(name)')
+      .order('sort_order')
+    setItensMenu(mi || [])
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
@@ -104,36 +115,19 @@ export default function Site() {
 
   function abrirEdicao(pagina) {
     if (pagina === 'nova') {
-      setForm({ slug: '', menu_label: '', content_html: '', show_in_menu: true, page_category_id: null })
+      setForm({ slug: '', menu_label: '', content_html: '', page_category_id: null })
     } else {
       setForm(pagina)
     }
     setEditando(pagina)
   }
 
-  async function criarCategoriaPagina() {
-    const nome = novaCategoriaPagina.trim()
-    if (!nome) return
-    const { data, error } = await supabase
-      .from('page_categories')
-      .insert({ name: nome, sort_order: categoriasPagina.length })
-      .select()
-      .single()
-    if (error) {
-      Alert.alert('Não foi possível criar', error.message)
-      return
-    }
-    setCategoriasPagina((c) => [...c, data])
-    setForm((f) => ({ ...f, page_category_id: data.id }))
-    setNovaCategoriaPagina('')
-  }
-
   function gerarSlugValido(texto) {
     return texto
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // tira acento
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-') // qualquer coisa que não seja letra/número vira hífen
-      .replace(/^-+|-+$/g, '') // tira hífen do início/fim
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
   }
 
   async function salvarPagina() {
@@ -157,7 +151,7 @@ export default function Site() {
   }
 
   async function excluirPagina(id) {
-    Alert.alert('Remover página?', 'Isso tira ela do menu do site.', [
+    Alert.alert('Remover página?', 'Isso apaga a página (e tira ela do menu, se estiver lá).', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Remover', style: 'destructive', onPress: async () => {
@@ -228,15 +222,10 @@ export default function Site() {
     load()
   }
 
-  async function alternarVisibilidadeCategoriaPagina(categoria) {
-    await supabase.from('page_categories').update({ show_in_menu: !categoria.show_in_menu }).eq('id', categoria.id)
-    load()
-  }
-
   async function excluirCategoriaPagina(categoria) {
     Alert.alert(
       `Apagar "${categoria.name}"?`,
-      'As páginas que estavam nela voltam a ficar avulsas no menu — nenhuma página é apagada.',
+      'As páginas que estavam nela ficam sem categoria — nenhuma página é apagada.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -249,7 +238,49 @@ export default function Site() {
     )
   }
 
-  // ---------- Cabeçalho com botão de voltar, usado dentro de cada seção ----------
+  async function adicionarItemMenu() {
+    const payload = { tipo: tipoNovoItem, sort_order: itensMenu.length }
+    if (tipoNovoItem === 'pagina') {
+      if (!novoItemPagina) return Alert.alert('Escolha uma página.')
+      payload.page_id = novoItemPagina
+    } else if (tipoNovoItem === 'categoria') {
+      if (!novoItemCategoria) return Alert.alert('Escolha uma categoria.')
+      payload.page_category_id = novoItemCategoria
+    } else {
+      if (!novoItemLabel.trim() || !novoItemUrl.trim()) return Alert.alert('Preencha o texto e o link.')
+      payload.label = novoItemLabel.trim()
+      payload.url = novoItemUrl.trim()
+    }
+    const { error } = await supabase.from('menu_items').insert(payload)
+    if (error) {
+      Alert.alert('Não foi possível adicionar', error.message)
+      return
+    }
+    setNovoItemPagina(''); setNovoItemCategoria(''); setNovoItemLabel(''); setNovoItemUrl('')
+    load()
+  }
+
+  async function moverItemMenu(index, direcao) {
+    const nova = [...itensMenu]
+    const destino = index + direcao
+    if (destino < 0 || destino >= nova.length) return
+    ;[nova[index], nova[destino]] = [nova[destino], nova[index]]
+    setItensMenu(nova)
+    await Promise.all(nova.map((item, i) => supabase.from('menu_items').update({ sort_order: i }).eq('id', item.id)))
+  }
+
+  async function removerItemMenu(id) {
+    await supabase.from('menu_items').delete().eq('id', id)
+    load()
+  }
+
+  function nomeItemMenu(item) {
+    if (item.tipo === 'pagina') return item.site_pages?.menu_label || '(página removida)'
+    if (item.tipo === 'categoria') return item.page_categories?.name || '(categoria removida)'
+    return item.label
+  }
+
+  // ---------- Cabeçalho com botão de voltar ----------
   function Cabecalho({ titulo }) {
     return (
       <Pressable style={styles.voltarRow} onPress={() => setSecao('menu')}>
@@ -284,22 +315,13 @@ export default function Site() {
           placeholderTextColor="#8B93A7"
         />
 
-        <Pressable style={styles.checkboxRow} onPress={() => setForm({ ...form, show_in_menu: !form.show_in_menu })}>
-          <View style={[styles.checkbox, form.show_in_menu && styles.checkboxOn]} />
-          <Text style={{ color: '#FFFFFF' }}>Mostrar no menu do site</Text>
-        </Pressable>
-
-        <Text style={styles.label}>Categoria no menu (opcional)</Text>
-        <Text style={styles.hint}>
-          Páginas na mesma categoria ficam agrupadas numa "pastinha" no menu. Categorias novas você cria
-          no menu Site → Categorias de página.
-        </Text>
+        <Text style={styles.label}>Agrupar dentro de uma categoria (opcional)</Text>
         <View style={styles.chipsRow}>
           <Pressable
             onPress={() => setForm({ ...form, page_category_id: null })}
             style={[styles.chip, !form.page_category_id && styles.chipActive]}
           >
-            <Text style={[styles.chipText, !form.page_category_id && styles.chipTextActive]}>Avulsa</Text>
+            <Text style={[styles.chipText, !form.page_category_id && styles.chipTextActive]}>Nenhuma</Text>
           </Pressable>
           {categoriasPagina.map((c) => (
             <Pressable
@@ -311,6 +333,9 @@ export default function Site() {
             </Pressable>
           ))}
         </View>
+        <Text style={styles.hint}>
+          Só agrupa visualmente. Pra aparecer no menu do site, adicione a página (ou a categoria) em Site → Menu do site.
+        </Text>
 
         <Pressable style={styles.saveBtn} onPress={salvarPagina} disabled={salvando}>
           <Text style={styles.saveBtnText}>{salvando ? 'Salvando...' : 'Salvar página'}</Text>
@@ -365,7 +390,8 @@ export default function Site() {
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
         <Cabecalho titulo="Categorias de página" />
         <Text style={styles.hint}>
-          Agrupam páginas dentro de uma "pastinha" no menu do site (ex: Grupos WhatsApp, Termos e Intermediação).
+          Agrupam páginas visualmente (ex: Grupos WhatsApp, Termos e Intermediação). Pra aparecer no menu,
+          adicione a categoria em Site → Menu do site.
         </Text>
 
         <View style={styles.addRow}>
@@ -386,22 +412,119 @@ export default function Site() {
         {categoriasPagina.map((cat) => (
           <View key={cat.id} style={styles.pageCard}>
             <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{cat.name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <Pressable style={styles.checkboxRow} onPress={() => alternarVisibilidadeCategoriaPagina(cat)}>
-                <View style={[styles.checkbox, cat.show_in_menu && styles.checkboxOn]} />
-                <Text style={{ color: '#8B93A7', fontSize: 12 }}>No menu</Text>
-              </Pressable>
-              <Pressable onPress={() => excluirCategoriaPagina(cat)}>
-                <Text style={{ color: '#E8562F' }}>Apagar</Text>
-              </Pressable>
-            </View>
+            <Pressable onPress={() => excluirCategoriaPagina(cat)}>
+              <Text style={{ color: '#E8562F' }}>Apagar</Text>
+            </Pressable>
           </View>
         ))}
       </ScrollView>
     )
   }
 
-  // ---------- Tela: Categorias e subcategorias ----------
+  // ---------- Tela: Menu do site ----------
+  if (secao === 'menu-site') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <Cabecalho titulo="Menu do site" />
+        <Text style={styles.hint}>
+          Só o que estiver nessa lista aparece no menu (☰) do site, nessa ordem.
+        </Text>
+
+        {itensMenu.length === 0 && <Text style={styles.hint}>Nenhum item no menu ainda.</Text>}
+
+        {itensMenu.map((item, i) => (
+          <View key={item.id} style={styles.pageCard}>
+            <View>
+              <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{nomeItemMenu(item)}</Text>
+              <Text style={{ color: '#8B93A7', fontSize: 11, textTransform: 'uppercase' }}>{item.tipo}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Pressable disabled={i === 0} onPress={() => moverItemMenu(i, -1)}>
+                <Text style={{ color: i === 0 ? '#2A2F3B' : '#8B93A7', fontSize: 16 }}>▲</Text>
+              </Pressable>
+              <Pressable disabled={i === itensMenu.length - 1} onPress={() => moverItemMenu(i, 1)}>
+                <Text style={{ color: i === itensMenu.length - 1 ? '#2A2F3B' : '#8B93A7', fontSize: 16 }}>▼</Text>
+              </Pressable>
+              <Pressable onPress={() => removerItemMenu(item.id)}>
+                <Text style={{ color: '#E8562F' }}>Remover</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+
+        <View style={styles.divider} />
+
+        <Text style={styles.title}>Adicionar item</Text>
+        <View style={styles.chipsRow}>
+          {[['pagina', 'Página existente'], ['categoria', 'Categoria'], ['link', 'Link personalizado']].map(([valor, texto]) => (
+            <Pressable
+              key={valor}
+              onPress={() => setTipoNovoItem(valor)}
+              style={[styles.chip, tipoNovoItem === valor && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, tipoNovoItem === valor && styles.chipTextActive]}>{texto}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {tipoNovoItem === 'pagina' && (
+          <View style={styles.chipsRow}>
+            {paginas.map((p) => (
+              <Pressable
+                key={p.id}
+                onPress={() => setNovoItemPagina(p.id)}
+                style={[styles.chip, novoItemPagina === p.id && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, novoItemPagina === p.id && styles.chipTextActive]}>{p.menu_label}</Text>
+              </Pressable>
+            ))}
+            {paginas.length === 0 && <Text style={styles.hint}>Nenhuma página criada ainda.</Text>}
+          </View>
+        )}
+
+        {tipoNovoItem === 'categoria' && (
+          <View style={styles.chipsRow}>
+            {categoriasPagina.map((c) => (
+              <Pressable
+                key={c.id}
+                onPress={() => setNovoItemCategoria(c.id)}
+                style={[styles.chip, novoItemCategoria === c.id && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, novoItemCategoria === c.id && styles.chipTextActive]}>{c.name}</Text>
+              </Pressable>
+            ))}
+            {categoriasPagina.length === 0 && <Text style={styles.hint}>Nenhuma categoria criada ainda.</Text>}
+          </View>
+        )}
+
+        {tipoNovoItem === 'link' && (
+          <View>
+            <TextInput
+              style={styles.input}
+              value={novoItemLabel}
+              onChangeText={setNovoItemLabel}
+              placeholder="Texto do item (ex: Fale conosco)"
+              placeholderTextColor="#8B93A7"
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 8 }]}
+              value={novoItemUrl}
+              onChangeText={setNovoItemUrl}
+              placeholder="Link (ex: https://... ou /pagina/algo)"
+              placeholderTextColor="#8B93A7"
+              autoCapitalize="none"
+            />
+          </View>
+        )}
+
+        <Pressable style={[styles.saveBtnSmall, { marginTop: 14 }]} onPress={adicionarItemMenu}>
+          <Text style={styles.saveBtnText}>+ Adicionar ao menu</Text>
+        </Pressable>
+      </ScrollView>
+    )
+  }
+
+  // ---------- Tela: Categorias e subcategorias (contas) ----------
   if (secao === 'categorias') {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
@@ -470,7 +593,7 @@ export default function Site() {
     )
   }
 
-  // ---------- Tela: Páginas do menu ----------
+  // ---------- Tela: Páginas ----------
   if (secao === 'paginas') {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
@@ -507,6 +630,14 @@ export default function Site() {
         <View style={styles.menuItemEsquerda}>
           <Ionicons name="settings-outline" size={22} color="#E7B94C" />
           <Text style={styles.menuItemTexto}>Configurações</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('menu-site')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="list-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Menu do site</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
       </Pressable>
@@ -555,12 +686,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#161922', borderColor: '#2A2F3B', borderWidth: 1,
     borderRadius: 10, padding: 14, marginTop: 10
   },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
-  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: '#8B93A7' },
-  checkboxOn: { backgroundColor: '#E7B94C', borderColor: '#E7B94C' },
   addRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   addBtn: { backgroundColor: '#E7B94C', borderRadius: 8, width: 44, alignItems: 'center', justifyContent: 'center' },
   addBtnText: { color: '#0F1115', fontWeight: '700', fontSize: 18 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chip: { borderWidth: 1, borderColor: '#2A2F3B', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
+  chipActive: { backgroundColor: '#E7B94C', borderColor: '#E7B94C' },
+  chipText: { color: '#8B93A7', fontSize: 12 },
+  chipTextActive: { color: '#0F1115', fontWeight: '700' },
   categoriaBloco: {
     backgroundColor: '#161922', borderColor: '#2A2F3B', borderWidth: 1,
     borderRadius: 10, marginBottom: 8, overflow: 'hidden'
