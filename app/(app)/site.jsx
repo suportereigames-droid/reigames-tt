@@ -21,6 +21,7 @@ export default function Site() {
 
   const [categoriasPagina, setCategoriasPagina] = useState([])
   const [novaCategoriaPagina, setNovaCategoriaPagina] = useState('')
+  const [categoriaPaginaAberta, setCategoriaPaginaAberta] = useState(null)
 
   const [categorias, setCategorias] = useState([])
   const [subcategoriasPorCategoria, setSubcategoriasPorCategoria] = useState({})
@@ -215,6 +216,34 @@ export default function Site() {
     load()
   }
 
+  async function criarCategoriaPagina() {
+    const nome = novaCategoriaPagina.trim()
+    if (!nome) return
+    const { error } = await supabase.from('page_categories').insert({ name: nome, sort_order: categoriasPagina.length })
+    if (error) {
+      Alert.alert('Não foi possível criar', error.message)
+      return
+    }
+    setNovaCategoriaPagina('')
+    load()
+  }
+
+  async function excluirCategoriaPagina(categoria) {
+    Alert.alert(
+      `Apagar "${categoria.name}"?`,
+      'As páginas que estavam nela voltam a ficar avulsas no menu — nenhuma página é apagada.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar', style: 'destructive', onPress: async () => {
+            await supabase.from('page_categories').delete().eq('id', categoria.id)
+            load()
+          }
+        }
+      ]
+    )
+  }
+
   // ---------- Cabeçalho com botão de voltar, usado dentro de cada seção ----------
   function Cabecalho({ titulo }) {
     return (
@@ -256,7 +285,10 @@ export default function Site() {
         </Pressable>
 
         <Text style={styles.label}>Categoria no menu (opcional)</Text>
-        <Text style={styles.hint}>Páginas na mesma categoria ficam agrupadas numa "pastinha" no menu.</Text>
+        <Text style={styles.hint}>
+          Páginas na mesma categoria ficam agrupadas numa "pastinha" no menu. Categorias novas você cria
+          no menu Site → Categorias de página.
+        </Text>
         <View style={styles.chipsRow}>
           <Pressable
             onPress={() => setForm({ ...form, page_category_id: null })}
@@ -273,18 +305,6 @@ export default function Site() {
               <Text style={[styles.chipText, form.page_category_id === c.id && styles.chipTextActive]}>{c.name}</Text>
             </Pressable>
           ))}
-        </View>
-        <View style={styles.addRow}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            value={novaCategoriaPagina}
-            onChangeText={setNovaCategoriaPagina}
-            placeholder="Criar categoria nova (ex: Grupos WhatsApp)"
-            placeholderTextColor="#8B93A7"
-          />
-          <Pressable style={styles.addBtn} onPress={criarCategoriaPagina}>
-            <Text style={styles.addBtnText}>+</Text>
-          </Pressable>
         </View>
 
         <Pressable style={styles.saveBtn} onPress={salvarPagina} disabled={salvando}>
@@ -330,6 +350,42 @@ export default function Site() {
         <Pressable style={styles.saveBtnSmall} onPress={salvarRodape} disabled={salvandoRodape}>
           <Text style={styles.saveBtnText}>{salvandoRodape ? 'Salvando...' : 'Salvar rodapé'}</Text>
         </Pressable>
+      </ScrollView>
+    )
+  }
+
+  // ---------- Tela: Categorias de página (menu do site) ----------
+  if (secao === 'categorias-pagina') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <Cabecalho titulo="Categorias de página" />
+        <Text style={styles.hint}>
+          Agrupam páginas dentro de uma "pastinha" no menu do site (ex: Grupos WhatsApp, Termos e Intermediação).
+        </Text>
+
+        <View style={styles.addRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={novaCategoriaPagina}
+            onChangeText={setNovaCategoriaPagina}
+            placeholder="Nova categoria (ex: Grupos WhatsApp)"
+            placeholderTextColor="#8B93A7"
+          />
+          <Pressable style={styles.addBtn} onPress={criarCategoriaPagina}>
+            <Text style={styles.addBtnText}>+</Text>
+          </Pressable>
+        </View>
+
+        {categoriasPagina.length === 0 && <Text style={styles.hint}>Nenhuma categoria criada ainda.</Text>}
+
+        {categoriasPagina.map((cat) => (
+          <View key={cat.id} style={styles.pageCard}>
+            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{cat.name}</Text>
+            <Pressable onPress={() => excluirCategoriaPagina(cat)}>
+              <Text style={{ color: '#E8562F' }}>Apagar</Text>
+            </Pressable>
+          </View>
+        ))}
       </ScrollView>
     )
   }
@@ -448,6 +504,14 @@ export default function Site() {
         <View style={styles.menuItemEsquerda}>
           <Ionicons name="pricetags-outline" size={22} color="#E7B94C" />
           <Text style={styles.menuItemTexto}>Categorias e subcategorias</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('categorias-pagina')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="folder-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Categorias de página</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
       </Pressable>
