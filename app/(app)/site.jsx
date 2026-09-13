@@ -17,7 +17,7 @@ export default function Site() {
   const [enviandoImagemPagina, setEnviandoImagemPagina] = useState(false)
   const [paginas, setPaginas] = useState([])
   const [editando, setEditando] = useState(null)
-  const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', page_category_id: null, image_url: null })
+  const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', page_category_id: null, image_url: null, gallery_category_id: null })
   const [salvando, setSalvando] = useState(false)
 
   const [categorias, setCategorias] = useState([])
@@ -73,7 +73,7 @@ export default function Site() {
       return
     }
     const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.9
     })
     if (resultado.canceled) return
@@ -101,19 +101,26 @@ export default function Site() {
   }
 
   async function escolherImagemPagina() {
-    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permissao.granted) {
-      Alert.alert('Precisamos de permissão para acessar suas fotos.')
-      return
-    }
-    const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9
-    })
-    if (resultado.canceled) return
-
-    setEnviandoImagemPagina(true)
     try {
+      const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!permissao.granted) {
+        Alert.alert('Precisamos de permissão para acessar suas fotos.')
+        return
+      }
+      const resultado = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9
+      })
+      if (resultado.canceled) {
+        Alert.alert('Seleção cancelada', 'Nenhuma imagem foi escolhida.')
+        return
+      }
+      if (!resultado.assets || !resultado.assets[0]) {
+        Alert.alert('Não foi possível ler a imagem escolhida.')
+        return
+      }
+
+      setEnviandoImagemPagina(true)
       const asset = resultado.assets[0]
       const extensao = (asset.uri.split('.').pop() || 'jpg').split('?')[0]
       const path = `paginas/${Date.now()}.${extensao}`
@@ -122,11 +129,15 @@ export default function Site() {
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
         contentType: asset.mimeType || 'image/jpeg'
       })
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        Alert.alert('Erro ao enviar a imagem', uploadError.message)
+        return
+      }
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
       setForm((f) => ({ ...f, image_url: data.publicUrl }))
+      Alert.alert('Imagem adicionada!')
     } catch (err) {
-      Alert.alert('Não foi possível enviar a imagem', 'Tente novamente.')
+      Alert.alert('Erro inesperado', String(err?.message || err))
     } finally {
       setEnviandoImagemPagina(false)
     }
@@ -148,7 +159,7 @@ export default function Site() {
 
   function abrirEdicao(pagina) {
     if (pagina === 'nova') {
-      setForm({ slug: '', menu_label: '', content_html: '', page_category_id: null, image_url: null })
+      setForm({ slug: '', menu_label: '', content_html: '', page_category_id: null, image_url: null, gallery_category_id: null })
     } else {
       setForm(pagina)
     }
@@ -364,6 +375,29 @@ export default function Site() {
           placeholder="<h1>Grupos de WhatsApp</h1>..."
           placeholderTextColor="#8B93A7"
         />
+
+        <Text style={styles.label}>Esta página mostra a galeria de imagens de uma categoria? (opcional)</Text>
+        <Text style={styles.hint}>
+          Se escolher uma categoria aqui, essa página vira sozinha uma lista com a imagem + nome de cada
+          página dentro dela — o código HTML acima é ignorado nesse caso.
+        </Text>
+        <View style={styles.chipsRow}>
+          <Pressable
+            onPress={() => setForm({ ...form, gallery_category_id: null })}
+            style={[styles.chip, !form.gallery_category_id && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, !form.gallery_category_id && styles.chipTextActive]}>Não é galeria</Text>
+          </Pressable>
+          {categoriasPagina.map((c) => (
+            <Pressable
+              key={c.id}
+              onPress={() => setForm({ ...form, gallery_category_id: c.id })}
+              style={[styles.chip, form.gallery_category_id === c.id && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, form.gallery_category_id === c.id && styles.chipTextActive]}>Galeria de "{c.name}"</Text>
+            </Pressable>
+          ))}
+        </View>
 
         <Text style={styles.label}>Agrupar dentro de uma categoria (opcional)</Text>
         <View style={styles.chipsRow}>
