@@ -19,6 +19,9 @@ export default function Site() {
   const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', show_in_menu: true })
   const [salvando, setSalvando] = useState(false)
 
+  const [categoriasPagina, setCategoriasPagina] = useState([])
+  const [novaCategoriaPagina, setNovaCategoriaPagina] = useState('')
+
   const [categorias, setCategorias] = useState([])
   const [subcategoriasPorCategoria, setSubcategoriasPorCategoria] = useState({})
   const [categoriaAberta, setCategoriaAberta] = useState(null)
@@ -38,6 +41,8 @@ export default function Site() {
     setRodape({ rodape_texto: settings?.rodape_texto || '' })
     setPaginas(pages || [])
     setCategorias(cats || [])
+    const { data: catsPagina } = await supabase.from('page_categories').select('*').order('sort_order')
+    setCategoriasPagina(catsPagina || [])
     const agrupado = {}
     ;(subs || []).forEach((s) => {
       if (!agrupado[s.category_id]) agrupado[s.category_id] = []
@@ -98,11 +103,28 @@ export default function Site() {
 
   function abrirEdicao(pagina) {
     if (pagina === 'nova') {
-      setForm({ slug: '', menu_label: '', content_html: '', show_in_menu: true })
+      setForm({ slug: '', menu_label: '', content_html: '', show_in_menu: true, page_category_id: null })
     } else {
       setForm(pagina)
     }
     setEditando(pagina)
+  }
+
+  async function criarCategoriaPagina() {
+    const nome = novaCategoriaPagina.trim()
+    if (!nome) return
+    const { data, error } = await supabase
+      .from('page_categories')
+      .insert({ name: nome, sort_order: categoriasPagina.length })
+      .select()
+      .single()
+    if (error) {
+      Alert.alert('Não foi possível criar', error.message)
+      return
+    }
+    setCategoriasPagina((c) => [...c, data])
+    setForm((f) => ({ ...f, page_category_id: data.id }))
+    setNovaCategoriaPagina('')
   }
 
   function gerarSlugValido(texto) {
@@ -232,6 +254,38 @@ export default function Site() {
           <View style={[styles.checkbox, form.show_in_menu && styles.checkboxOn]} />
           <Text style={{ color: '#FFFFFF' }}>Mostrar no menu do site</Text>
         </Pressable>
+
+        <Text style={styles.label}>Categoria no menu (opcional)</Text>
+        <Text style={styles.hint}>Páginas na mesma categoria ficam agrupadas numa "pastinha" no menu.</Text>
+        <View style={styles.chipsRow}>
+          <Pressable
+            onPress={() => setForm({ ...form, page_category_id: null })}
+            style={[styles.chip, !form.page_category_id && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, !form.page_category_id && styles.chipTextActive]}>Avulsa</Text>
+          </Pressable>
+          {categoriasPagina.map((c) => (
+            <Pressable
+              key={c.id}
+              onPress={() => setForm({ ...form, page_category_id: c.id })}
+              style={[styles.chip, form.page_category_id === c.id && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, form.page_category_id === c.id && styles.chipTextActive]}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.addRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={novaCategoriaPagina}
+            onChangeText={setNovaCategoriaPagina}
+            placeholder="Criar categoria nova (ex: Grupos WhatsApp)"
+            placeholderTextColor="#8B93A7"
+          />
+          <Pressable style={styles.addBtn} onPress={criarCategoriaPagina}>
+            <Text style={styles.addBtnText}>+</Text>
+          </Pressable>
+        </View>
 
         <Pressable style={styles.saveBtn} onPress={salvarPagina} disabled={salvando}>
           <Text style={styles.saveBtnText}>{salvando ? 'Salvando...' : 'Salvar página'}</Text>
