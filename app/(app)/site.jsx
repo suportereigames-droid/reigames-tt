@@ -1,14 +1,17 @@
 import { useCallback, useState } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
 import { useFocusEffect } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase.js'
 
 const BUCKET = 'product-images'
 
 export default function Site() {
+  const [secao, setSecao] = useState('menu') // 'menu' | 'configuracoes' | 'categorias' | 'paginas'
+
   const [logoUrl, setLogoUrl] = useState('')
-  const [rodape, setRodape] = useState({ ano_fundacao: '' })
+  const [rodape, setRodape] = useState({ rodape_texto: '' })
   const [salvandoRodape, setSalvandoRodape] = useState(false)
   const [enviandoLogo, setEnviandoLogo] = useState(false)
   const [paginas, setPaginas] = useState([])
@@ -24,7 +27,7 @@ export default function Site() {
 
   const load = useCallback(async () => {
     const [{ data: settings }, { data: pages }, { data: cats, error: catsError }, { data: subs, error: subsError }] = await Promise.all([
-      supabase.from('site_settings').select('logo_url, ano_fundacao').single(),
+      supabase.from('site_settings').select('logo_url, rodape_texto').single(),
       supabase.from('site_pages').select('*').order('sort_order'),
       supabase.from('categories').select('*').order('sort_order'),
       supabase.from('subcategories').select('*').order('sort_order')
@@ -32,7 +35,7 @@ export default function Site() {
     if (catsError) Alert.alert('Erro ao carregar categorias', catsError.message)
     if (subsError) Alert.alert('Erro ao carregar subcategorias', subsError.message)
     setLogoUrl(settings?.logo_url || '')
-    setRodape({ ano_fundacao: settings?.ano_fundacao ? String(settings.ano_fundacao) : '' })
+    setRodape({ rodape_texto: settings?.rodape_texto || '' })
     setPaginas(pages || [])
     setCategorias(cats || [])
     const agrupado = {}
@@ -83,7 +86,7 @@ export default function Site() {
     setSalvandoRodape(true)
     const { error } = await supabase
       .from('site_settings')
-      .update({ ano_fundacao: rodape.ano_fundacao ? Number(rodape.ano_fundacao) : null })
+      .update({ rodape_texto: rodape.rodape_texto || null })
       .eq('id', true)
     setSalvandoRodape(false)
     if (error) {
@@ -190,10 +193,24 @@ export default function Site() {
     load()
   }
 
-  if (editando) {
+  // ---------- Cabeçalho com botão de voltar, usado dentro de cada seção ----------
+  function Cabecalho({ titulo }) {
+    return (
+      <Pressable style={styles.voltarRow} onPress={() => setSecao('menu')}>
+        <Ionicons name="chevron-back" size={20} color="#E7B94C" />
+        <Text style={styles.voltarTexto}>{titulo}</Text>
+      </Pressable>
+    )
+  }
+
+  // ---------- Tela: edição de uma página específica ----------
+  if (secao === 'paginas' && editando) {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
-        <Text style={styles.title}>{editando === 'nova' ? 'Nova página' : 'Editar página'}</Text>
+        <Pressable style={styles.voltarRow} onPress={() => setEditando(null)}>
+          <Ionicons name="chevron-back" size={20} color="#E7B94C" />
+          <Text style={styles.voltarTexto}>{editando === 'nova' ? 'Nova página' : 'Editar página'}</Text>
+        </Pressable>
 
         <Text style={styles.label}>Nome no menu</Text>
         <TextInput style={styles.input} value={form.menu_label} onChangeText={(v) => setForm({ ...form, menu_label: v })} placeholder="Ex: Grupo WhatsApp" placeholderTextColor="#8B93A7" />
@@ -226,120 +243,168 @@ export default function Site() {
     )
   }
 
-  return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
-      <Text style={styles.title}>Logo do site</Text>
-      {logoUrl ? <Image source={{ uri: logoUrl }} style={styles.logoPreview} resizeMode="contain" /> : null}
-      <Pressable style={styles.saveBtnSmall} onPress={escolherLogo} disabled={enviandoLogo}>
-        <Text style={styles.saveBtnText}>{enviandoLogo ? 'Enviando...' : logoUrl ? 'Trocar logo' : 'Escolher logo da galeria'}</Text>
-      </Pressable>
+  // ---------- Tela: Configurações (logo + rodapé) ----------
+  if (secao === 'configuracoes') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <Cabecalho titulo="Configurações" />
 
-      <View style={styles.divider} />
+        <Text style={styles.title}>Logo do site</Text>
+        {logoUrl ? <Image source={{ uri: logoUrl }} style={styles.logoPreview} resizeMode="contain" /> : null}
+        <Pressable style={styles.saveBtnSmall} onPress={escolherLogo} disabled={enviandoLogo}>
+          <Text style={styles.saveBtnText}>{enviandoLogo ? 'Enviando...' : logoUrl ? 'Trocar logo' : 'Escolher logo da galeria'}</Text>
+        </Pressable>
 
-      <Text style={styles.title}>Rodapé do site</Text>
-      <Text style={styles.hint}>
-        O WhatsApp e o Instagram do rodapé/botão flutuante vêm do seu perfil (aba Perfil) — mude por lá.
-      </Text>
+        <View style={styles.divider} />
 
-      <Text style={styles.label}>Ano de fundação</Text>
-      <TextInput
-        style={styles.input}
-        value={rodape.ano_fundacao}
-        onChangeText={(v) => setRodape({ ano_fundacao: v.replace(/\D/g, '') })}
-        placeholder="2023"
-        placeholderTextColor="#8B93A7"
-        keyboardType="number-pad"
-      />
-      <Text style={styles.hint}>Vai aparecer tipo "© 2023–2026" no rodapé, em vez de só o ano atual.</Text>
+        <Text style={styles.title}>Rodapé do site</Text>
+        <Text style={styles.hint}>
+          O WhatsApp e o Instagram do rodapé/botão flutuante vêm do seu perfil (aba Perfil) — mude por lá.
+        </Text>
 
-      <Pressable style={styles.saveBtnSmall} onPress={salvarRodape} disabled={salvandoRodape}>
-        <Text style={styles.saveBtnText}>{salvandoRodape ? 'Salvando...' : 'Salvar rodapé'}</Text>
-      </Pressable>
-
-      <View style={styles.divider} />
-
-      <Text style={styles.title}>Categorias e subcategorias</Text>
-      <Text style={styles.hint}>
-        Toca numa categoria pra ver/editar as subcategorias dela. Usadas no cadastro de contas e nos filtros do site.
-      </Text>
-
-      <View style={styles.addRow}>
+        <Text style={styles.label}>Texto do rodapé</Text>
         <TextInput
-          style={[styles.input, { flex: 1 }]}
-          value={novaCategoria}
-          onChangeText={setNovaCategoria}
-          placeholder="Nova categoria (ex: EFOOTBALL)"
+          style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+          multiline
+          value={rodape.rodape_texto}
+          onChangeText={(v) => setRodape({ rodape_texto: v })}
+          placeholder="© 2023–2026 Rei Games — contas verificadas, entrega com garantia."
           placeholderTextColor="#8B93A7"
         />
-        <Pressable style={styles.addBtn} onPress={adicionarCategoria}>
-          <Text style={styles.addBtnText}>+</Text>
+        <Text style={styles.hint}>Esse texto aparece exatamente assim, embaixo de todas as páginas do site.</Text>
+
+        <Pressable style={styles.saveBtnSmall} onPress={salvarRodape} disabled={salvandoRodape}>
+          <Text style={styles.saveBtnText}>{salvandoRodape ? 'Salvando...' : 'Salvar rodapé'}</Text>
         </Pressable>
-      </View>
+      </ScrollView>
+    )
+  }
 
-      {categorias.map((cat) => (
-        <View key={cat.id} style={styles.categoriaBloco}>
-          <Pressable
-            style={styles.categoriaHeader}
-            onPress={() => setCategoriaAberta(categoriaAberta === cat.id ? null : cat.id)}
-          >
-            <Text style={styles.categoriaNome}>{cat.name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <Text style={{ color: '#8B93A7', fontSize: 12 }}>
-                {(subcategoriasPorCategoria[cat.id] || []).length} subcategoria(s)
-              </Text>
-              <Pressable onPress={() => excluirCategoria(cat)}>
-                <Text style={{ color: '#E8562F' }}>Apagar</Text>
-              </Pressable>
-            </View>
+  // ---------- Tela: Categorias e subcategorias ----------
+  if (secao === 'categorias') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <Cabecalho titulo="Categorias e subcategorias" />
+        <Text style={styles.hint}>
+          Toca numa categoria pra ver/editar as subcategorias dela. Usadas no cadastro de contas e nos filtros do site.
+        </Text>
+
+        <View style={styles.addRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={novaCategoria}
+            onChangeText={setNovaCategoria}
+            placeholder="Nova categoria (ex: EFOOTBALL)"
+            placeholderTextColor="#8B93A7"
+          />
+          <Pressable style={styles.addBtn} onPress={adicionarCategoria}>
+            <Text style={styles.addBtnText}>+</Text>
           </Pressable>
+        </View>
 
-          {categoriaAberta === cat.id && (
-            <View style={styles.subcategoriaArea}>
-              {(subcategoriasPorCategoria[cat.id] || []).map((sub) => (
-                <View key={sub.id} style={styles.subcategoriaLinha}>
-                  <Text style={{ color: '#FFFFFF' }}>{sub.name}</Text>
-                  <Pressable onPress={() => excluirSubcategoria(sub.id)}>
-                    <Text style={{ color: '#E8562F', fontSize: 12 }}>Remover</Text>
-                  </Pressable>
-                </View>
-              ))}
-              <View style={styles.addRow}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  value={novaSubcategoria}
-                  onChangeText={setNovaSubcategoria}
-                  placeholder="Nova subcategoria"
-                  placeholderTextColor="#8B93A7"
-                />
-                <Pressable style={styles.addBtn} onPress={() => adicionarSubcategoria(cat.id)}>
-                  <Text style={styles.addBtnText}>+</Text>
+        {categorias.map((cat) => (
+          <View key={cat.id} style={styles.categoriaBloco}>
+            <Pressable
+              style={styles.categoriaHeader}
+              onPress={() => setCategoriaAberta(categoriaAberta === cat.id ? null : cat.id)}
+            >
+              <Text style={styles.categoriaNome}>{cat.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <Text style={{ color: '#8B93A7', fontSize: 12 }}>
+                  {(subcategoriasPorCategoria[cat.id] || []).length} subcategoria(s)
+                </Text>
+                <Pressable onPress={() => excluirCategoria(cat)}>
+                  <Text style={{ color: '#E8562F' }}>Apagar</Text>
                 </Pressable>
               </View>
-            </View>
-          )}
-        </View>
-      ))}
+            </Pressable>
 
-      <View style={styles.divider} />
-
-      <View style={styles.rowBetween}>
-        <Text style={styles.title}>Páginas do menu</Text>
-        <Pressable onPress={() => abrirEdicao('nova')}>
-          <Text style={{ color: '#E7B94C', fontWeight: '700' }}>+ Nova</Text>
-        </Pressable>
-      </View>
-
-      {paginas.map((p) => (
-        <Pressable key={p.id} style={styles.pageCard} onPress={() => abrirEdicao(p)}>
-          <View>
-            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{p.menu_label}</Text>
-            <Text style={{ color: '#8B93A7', fontSize: 12 }}>/pagina/{p.slug}</Text>
+            {categoriaAberta === cat.id && (
+              <View style={styles.subcategoriaArea}>
+                {(subcategoriasPorCategoria[cat.id] || []).map((sub) => (
+                  <View key={sub.id} style={styles.subcategoriaLinha}>
+                    <Text style={{ color: '#FFFFFF' }}>{sub.name}</Text>
+                    <Pressable onPress={() => excluirSubcategoria(sub.id)}>
+                      <Text style={{ color: '#E8562F', fontSize: 12 }}>Remover</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                <View style={styles.addRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={novaSubcategoria}
+                    onChangeText={setNovaSubcategoria}
+                    placeholder="Nova subcategoria"
+                    placeholderTextColor="#8B93A7"
+                  />
+                  <Pressable style={styles.addBtn} onPress={() => adicionarSubcategoria(cat.id)}>
+                    <Text style={styles.addBtnText}>+</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
-          <Pressable onPress={() => excluirPagina(p.id)}>
-            <Text style={{ color: '#E8562F' }}>Excluir</Text>
+        ))}
+      </ScrollView>
+    )
+  }
+
+  // ---------- Tela: Páginas do menu ----------
+  if (secao === 'paginas') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <View style={styles.rowBetween}>
+          <Cabecalho titulo="Páginas" />
+          <Pressable onPress={() => abrirEdicao('nova')}>
+            <Text style={{ color: '#E7B94C', fontWeight: '700' }}>+ Nova</Text>
           </Pressable>
-        </Pressable>
-      ))}
+        </View>
+
+        {paginas.length === 0 && <Text style={styles.hint}>Nenhuma página criada ainda.</Text>}
+
+        {paginas.map((p) => (
+          <Pressable key={p.id} style={styles.pageCard} onPress={() => abrirEdicao(p)}>
+            <View>
+              <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{p.menu_label}</Text>
+              <Text style={{ color: '#8B93A7', fontSize: 12 }}>/pagina/{p.slug}</Text>
+            </View>
+            <Pressable onPress={() => excluirPagina(p.id)}>
+              <Text style={{ color: '#E8562F' }}>Excluir</Text>
+            </Pressable>
+          </Pressable>
+        ))}
+      </ScrollView>
+    )
+  }
+
+  // ---------- Tela: Menu principal ----------
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+      <Text style={styles.title}>Site</Text>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('configuracoes')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="settings-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Configurações</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('categorias')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="pricetags-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Categorias e subcategorias</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('paginas')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="document-text-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Páginas</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
     </ScrollView>
   )
 }
@@ -377,5 +442,14 @@ const styles = StyleSheet.create({
   subcategoriaLinha: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#2A2F3B'
-  }
+  },
+  menuItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#161922', borderColor: '#2A2F3B', borderWidth: 1,
+    borderRadius: 10, padding: 16, marginBottom: 10
+  },
+  menuItemEsquerda: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  menuItemTexto: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  voltarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 2 },
+  voltarTexto: { color: '#E7B94C', fontSize: 18, fontWeight: '700' }
 })
