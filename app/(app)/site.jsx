@@ -14,9 +14,10 @@ export default function Site() {
   const [rodape, setRodape] = useState({ rodape_texto: '' })
   const [salvandoRodape, setSalvandoRodape] = useState(false)
   const [enviandoLogo, setEnviandoLogo] = useState(false)
+  const [enviandoImagemPagina, setEnviandoImagemPagina] = useState(false)
   const [paginas, setPaginas] = useState([])
   const [editando, setEditando] = useState(null)
-  const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', page_category_id: null })
+  const [form, setForm] = useState({ slug: '', menu_label: '', content_html: '', page_category_id: null, image_url: null })
   const [salvando, setSalvando] = useState(false)
 
   const [categorias, setCategorias] = useState([])
@@ -99,6 +100,38 @@ export default function Site() {
     }
   }
 
+  async function escolherImagemPagina() {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permissao.granted) {
+      Alert.alert('Precisamos de permissão para acessar suas fotos.')
+      return
+    }
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9
+    })
+    if (resultado.canceled) return
+
+    setEnviandoImagemPagina(true)
+    try {
+      const asset = resultado.assets[0]
+      const extensao = (asset.uri.split('.').pop() || 'jpg').split('?')[0]
+      const path = `paginas/${Date.now()}.${extensao}`
+      const resposta = await fetch(asset.uri)
+      const arrayBuffer = await resposta.arrayBuffer()
+      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
+        contentType: asset.mimeType || 'image/jpeg'
+      })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+      setForm((f) => ({ ...f, image_url: data.publicUrl }))
+    } catch (err) {
+      Alert.alert('Não foi possível enviar a imagem', 'Tente novamente.')
+    } finally {
+      setEnviandoImagemPagina(false)
+    }
+  }
+
   async function salvarRodape() {
     setSalvandoRodape(true)
     const { error } = await supabase
@@ -115,7 +148,7 @@ export default function Site() {
 
   function abrirEdicao(pagina) {
     if (pagina === 'nova') {
-      setForm({ slug: '', menu_label: '', content_html: '', page_category_id: null })
+      setForm({ slug: '', menu_label: '', content_html: '', page_category_id: null, image_url: null })
     } else {
       setForm(pagina)
     }
@@ -305,7 +338,14 @@ export default function Site() {
         <Text style={styles.label}>Link (reigames.com.br/pagina/...)</Text>
         <TextInput style={styles.input} value={form.slug} onChangeText={(v) => setForm({ ...form, slug: v })} placeholder="grupo-whatsapp" placeholderTextColor="#8B93A7" autoCapitalize="none" />
 
-        <Text style={styles.label}>Código da página (HTML)</Text>
+        <Text style={styles.label}>Imagem da página (opcional)</Text>
+        <Text style={styles.hint}>Usada na galeria da categoria, se essa página estiver numa.</Text>
+        {form.image_url ? <Image source={{ uri: form.image_url }} style={styles.logoPreview} resizeMode="cover" /> : null}
+        <Pressable style={styles.saveBtnSmall} onPress={escolherImagemPagina} disabled={enviandoImagemPagina}>
+          <Text style={styles.saveBtnText}>{enviandoImagemPagina ? 'Enviando...' : form.image_url ? 'Trocar imagem' : 'Escolher imagem da galeria'}</Text>
+        </Pressable>
+
+        <Text style={[styles.label, { marginTop: 20 }]}>Código da página (HTML)</Text>
         <TextInput
           style={[styles.input, { height: 180, textAlignVertical: 'top', fontFamily: 'monospace' }]}
           multiline
