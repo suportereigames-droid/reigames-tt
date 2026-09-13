@@ -341,9 +341,19 @@ export default function Site() {
         <Text style={styles.label}>Imagem da página (opcional)</Text>
         <Text style={styles.hint}>Usada na galeria da categoria, se essa página estiver numa.</Text>
         {form.image_url ? <Image source={{ uri: form.image_url }} style={styles.logoPreview} resizeMode="cover" /> : null}
-        <Pressable style={styles.saveBtnSmall} onPress={escolherImagemPagina} disabled={enviandoImagemPagina}>
-          <Text style={styles.saveBtnText}>{enviandoImagemPagina ? 'Enviando...' : form.image_url ? 'Trocar imagem' : 'Escolher imagem da galeria'}</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Pressable style={[styles.saveBtnSmall, { flex: 1 }]} onPress={escolherImagemPagina} disabled={enviandoImagemPagina}>
+            <Text style={styles.saveBtnText}>{enviandoImagemPagina ? 'Enviando...' : form.image_url ? 'Trocar imagem' : 'Escolher imagem da galeria'}</Text>
+          </Pressable>
+          {form.image_url && (
+            <Pressable
+              style={[styles.saveBtnSmall, { backgroundColor: '#2A2F3B' }]}
+              onPress={() => setForm((f) => ({ ...f, image_url: null }))}
+            >
+              <Text style={[styles.saveBtnText, { color: '#E8562F' }]}>Remover</Text>
+            </Pressable>
+          )}
+        </View>
 
         <Text style={[styles.label, { marginTop: 20 }]}>Código da página (HTML)</Text>
         <TextInput
