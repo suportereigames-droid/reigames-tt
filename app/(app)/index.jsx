@@ -24,11 +24,11 @@ function dataCorte(periodo) {
 const CORES_JOGO = ['#E7B94C', '#28C08A', '#7C9EF2', '#E8562F', '#C084FC', '#F472B6']
 
 export default function Dashboard() {
-  const { profile, isAdmin, signOut } = useAuth()
+  const { profile, isAdmin, user, signOut } = useAuth()
   const router = useRouter()
   const [periodo, setPeriodo] = useState('7dias')
   const [stats, setStats] = useState({
-    pedidosAbertos: 0, disponivel: 0, vendido: 0, faturado: 0, visitas: 0, porJogo: [], vendasPorJogo: []
+    pedidosAbertos: 0, disponivel: 0, vendido: 0, faturado: 0, visitas: 0, porJogo: [], porJogoMinhas: [], vendasPorJogo: []
   })
   const [onlineAgora, setOnlineAgora] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -40,7 +40,7 @@ export default function Dashboard() {
     if (corte) pedidosQuery = pedidosQuery.gte('created_at', corte)
 
     const [{ data: produtos }, { data: pedidos }, visitas] = await Promise.all([
-      supabase.from('products').select('status, game'),
+      supabase.from('products').select('status, game, created_by'),
       pedidosQuery,
       isAdmin
         ? (() => {
@@ -71,19 +71,27 @@ export default function Dashboard() {
       .sort((a, b) => b.valor - a.valor)
 
     const contagemPorJogo = {}
+    const contagemPorJogoMinhas = {}
     produtos?.forEach((p) => {
       if (p.status !== 'disponivel') return
       contagemPorJogo[p.game] = (contagemPorJogo[p.game] || 0) + 1
+      if (p.created_by === user?.id) {
+        contagemPorJogoMinhas[p.game] = (contagemPorJogoMinhas[p.game] || 0) + 1
+      }
     })
     const porJogo = Object.entries(contagemPorJogo)
       .map(([game, total]) => ({ game, total }))
       .sort((a, b) => b.total - a.total)
+    const porJogoMinhas = Object.entries(contagemPorJogoMinhas)
+      .map(([game, total]) => ({ game, total }))
+      .sort((a, b) => b.total - a.total)
 
-    setStats({ disponivel, vendido, faturado, visitas: visitas.count || 0, pedidosAbertos, porJogo, vendasPorJogo })
-  }, [isAdmin, periodo])
+    setStats({ disponivel, vendido, faturado, visitas: visitas.count || 0, pedidosAbertos, porJogo, porJogoMinhas, vendasPorJogo })
+  }, [isAdmin, periodo, user?.id])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  // Presença em tempo real: conta quantas abas do SITE estão abertas agora.
   useEffect(() => {
     if (!isAdmin) return
     const canal = supabase.channel('site-presence')
@@ -102,6 +110,7 @@ export default function Dashboard() {
   }
 
   const maiorJogo = stats.porJogo[0]?.total || 1
+  const maiorJogoMinhas = stats.porJogoMinhas[0]?.total || 1
 
   return (
     <ScrollView
@@ -114,6 +123,7 @@ export default function Dashboard() {
         {isAdmin ? 'Visão geral de toda a loja' : 'Resumo das suas contas e pedidos'}
       </Text>
 
+      {/* Seletor de período */}
       <View style={styles.periodoRow}>
         {PERIODOS.map((p) => (
           <Pressable
@@ -126,11 +136,13 @@ export default function Dashboard() {
         ))}
       </View>
 
+      {/* Card grande de faturamento */}
       <View style={styles.heroCard}>
         <Text style={styles.heroLabel}>{isAdmin ? 'Faturado no período' : 'Você faturou no período'}</Text>
         <Text style={styles.heroValue}>{money(stats.faturado)}</Text>
       </View>
 
+      {/* Visitas + online agora (só admin) */}
       {isAdmin && (
         <View style={styles.visitasCard}>
           <View>
@@ -144,12 +156,14 @@ export default function Dashboard() {
         </View>
       )}
 
+      {/* Grid de números rápidos */}
       <View style={styles.grid}>
         <Card label="Pedidos em aberto" value={stats.pedidosAbertos} color="#E7B94C" onPress={() => router.push('/pedidos')} />
         <Card label="Contas disponíveis" value={stats.disponivel} color="#28C08A" onPress={() => router.push('/produtos')} />
         <Card label="Contas vendidas" value={stats.vendido} color="#8B93A7" />
       </View>
 
+      {/* Contas disponíveis por jogo */}
       {stats.vendasPorJogo.length > 0 && (
         <View style={styles.porJogoCard}>
           <Text style={styles.porJogoTitulo}>Vendas por jogo (no período)</Text>
@@ -174,7 +188,7 @@ export default function Dashboard() {
 
       {stats.porJogo.length > 0 && (
         <View style={styles.porJogoCard}>
-          <Text style={styles.porJogoTitulo}>Contas disponíveis por jogo</Text>
+          <Text style={styles.porJogoTitulo}>Contas disponíveis no site (geral)</Text>
           {stats.porJogo.map((item, i) => (
             <View key={item.game} style={styles.porJogoLinha}>
               <View style={styles.porJogoTextos}>
@@ -191,6 +205,35 @@ export default function Dashboard() {
               </View>
             </View>
           ))}
+        </View>
+      )}
+
+      {stats.porJogoMinhas.length > 0 ? (
+        <View style={styles.porJogoCard}>
+          <Text style={styles.porJogoTitulo}>Minhas contas disponíveis</Text>
+          {stats.porJogoMinhas.map((item, i) => (
+            <View key={item.game} style={styles.porJogoLinha}>
+              <View style={styles.porJogoTextos}>
+                <Text style={styles.porJogoNome}>{item.game}</Text>
+                <Text style={styles.porJogoNumero}>{item.total}</Text>
+              </View>
+              <View style={styles.barraFundo}>
+                <View
+                  style={[
+                    styles.barraPreenchida,
+                    { width: `${(item.total / maiorJogoMinhas) * 100}%`, backgroundColor: CORES_JOGO[i % CORES_JOGO.length] }
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.porJogoCard}>
+          <Text style={styles.porJogoTitulo}>Minhas contas disponíveis</Text>
+          <Text style={{ color: '#8B93A7', fontSize: 13 }}>
+            Você não tem nenhuma conta disponível no momento — bom momento pra postar mais.
+          </Text>
         </View>
       )}
 

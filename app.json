@@ -16,7 +16,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F1115"
       },
-      "permissions": ["NOTIFICATIONS"]
+      "permissions": [
+        "android.permission.NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       [
@@ -35,8 +38,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "COLOQUE-AQUI-O-ID-GERADO-PELO-EAS"
+        "projectId": "b04dfe0e-bc0a-4731-8e7f-253dfb98b71f"
       }
-    }
+    },
+    "owner": "haryel1"
   }
 }
