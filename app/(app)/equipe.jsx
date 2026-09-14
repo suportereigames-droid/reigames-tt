@@ -24,10 +24,11 @@ function PainelMembro({ membro, onFechar, onAtualizado }) {
   useEffect(() => {
     async function carregar() {
       const [{ data: perfil }, { data: pagina }] = await Promise.all([
-        supabase.from('profiles').select('whatsapp').eq('id', membro.id).single(),
+        supabase.from('profiles').select('whatsapp, email').eq('id', membro.id).single(),
         supabase.from('seller_pages').select('*').eq('seller_id', membro.id).single()
       ])
       setWhatsapp(perfil?.whatsapp || '')
+      setNovoEmail(perfil?.email || '')
       setLoja({
         slug: pagina?.slug || '',
         display_name: pagina?.display_name || membro.full_name,
@@ -183,7 +184,7 @@ function PainelMembro({ membro, onFechar, onAtualizado }) {
                     <Text style={styles.btnPequenoTexto}>Salvar</Text>
                   </Pressable>
 
-                  <Text style={styles.label}>Trocar e-mail</Text>
+                  <Text style={styles.label}>E-mail de login</Text>
                   <TextInput style={styles.input} value={novoEmail} onChangeText={setNovoEmail} placeholder="novo@email.com" placeholderTextColor="#8B93A7" autoCapitalize="none" />
                   <Pressable style={styles.btnPequeno} onPress={trocarEmail} disabled={processando}>
                     <Text style={styles.btnPequenoTexto}>Trocar</Text>
