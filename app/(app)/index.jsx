@@ -51,7 +51,13 @@ export default function Dashboard() {
         : Promise.resolve({ count: null })
     ])
 
-    const disponivel = produtos?.filter((p) => p.status === 'disponivel').length || 0
+    // O cartão principal "Contas disponíveis" é a visão de trabalho de
+    // cada um: pro admin, o total do site; pro membro, só as próprias —
+    // o total geral do site pra ele fica no card separado "geral", mais
+    // embaixo, sem misturar com esse aqui.
+    const disponivel = isAdmin
+      ? produtos?.filter((p) => p.status === 'disponivel').length || 0
+      : produtos?.filter((p) => p.status === 'disponivel' && p.created_by === user?.id).length || 0
     // "Vendido" agora vem dos PEDIDOS pagos, não do status da conta — assim
     // continua correto mesmo que o anúncio seja apagado depois da venda.
     const pedidosPagos = pedidos?.filter((p) => p.status === 'pago') || []
