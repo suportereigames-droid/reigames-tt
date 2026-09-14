@@ -25,7 +25,7 @@ export default function Login() {
     <View style={styles.container}>
       <Text style={styles.brandGold}>REI</Text>
       <Text style={styles.brand}>GAMES</Text>
-      <Text style={styles.subtitle}>App da equipe — TT</Text>
+      <Text style={styles.subtitle}>App da equipe</Text>
 
       <TextInput
         style={styles.input}

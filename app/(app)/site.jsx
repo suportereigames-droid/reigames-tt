@@ -1098,14 +1098,6 @@ export default function Site() {
         <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
       </Pressable>
 
-      <Pressable style={styles.menuItem} onPress={() => setSecao('loja-pessoal')}>
-        <View style={styles.menuItemEsquerda}>
-          <Ionicons name="storefront-outline" size={22} color="#E7B94C" />
-          <Text style={styles.menuItemTexto}>Minha Loja</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
-      </Pressable>
-
       <Pressable style={styles.menuItem} onPress={() => setSecao('banner')}>
         <View style={styles.menuItemEsquerda}>
           <Ionicons name="images-outline" size={22} color="#E7B94C" />
