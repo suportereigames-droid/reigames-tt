@@ -3,6 +3,7 @@ import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert } from 
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { diagnosticarPush } from '../../lib/push.js'
 
 export default function Perfil() {
   const { user, profile, isAdmin } = useAuth()
@@ -57,6 +58,37 @@ export default function Perfil() {
 
       <Pressable style={styles.saveBtn} onPress={salvar} disabled={salvando}>
         <Text style={styles.saveBtnText}>{salvando ? 'Salvando...' : 'Salvar'}</Text>
+      </Pressable>
+
+      <Pressable
+        style={[styles.saveBtn, { backgroundColor: '#1D212C', borderColor: '#2A2F3B', borderWidth: 1, marginTop: 12 }]}
+        onPress={() => diagnosticarPush(user.id)}
+      >
+        <Text style={{ color: '#E7B94C', fontWeight: '700' }}>🔍 Testar notificações</Text>
+      </Pressable>
+
+      <Pressable
+        style={[styles.saveBtn, { backgroundColor: '#1D212C', borderColor: '#2A2F3B', borderWidth: 1, marginTop: 12 }]}
+        onPress={async () => {
+          const { data: sessao } = await supabase.auth.getSession()
+          const resposta = await fetch(`${supabase.supabaseUrl}/functions/v1/test-push`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessao.session.access_token}`,
+              apikey: supabase.supabaseKey
+            }
+          })
+          const corpo = await resposta.json().catch(() => null)
+          Alert.alert(
+            resposta.ok ? 'Notificação enviada!' : 'Não foi possível enviar',
+            resposta.ok
+              ? `Mandei pra ${corpo.enviadosPara} aparelho(s). Se não chegar em alguns segundos, o problema é na entrega (Firebase/Expo), não no nosso código.`
+              : corpo?.error || `Erro ${resposta.status}`
+          )
+        }}
+      >
+        <Text style={{ color: '#E7B94C', fontWeight: '700' }}>📨 Mandar notificação de teste</Text>
       </Pressable>
 
       {isAdmin && (
