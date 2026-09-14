@@ -8,7 +8,7 @@ const money = (v) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`
 const STATUS_COR = { disponivel: '#28C08A', reservado: '#E7B94C', vendido: '#8B93A7', oculto: '#8B93A7' }
 
 export default function Produtos() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
   const router = useRouter()
   const params = useLocalSearchParams() // pode vir de Equipe com { seller, sellerName }
 
@@ -23,16 +23,24 @@ export default function Produtos() {
   const [gameFiltro, setGameFiltro] = useState(null)
 
   const load = useCallback(async () => {
-    // A RLS já limita: membro comum só recebe as próprias linhas.
+    // Não dá mais pra confiar só na RLS aqui: desde que liberamos a
+    // contagem geral de disponíveis pra todo mundo (painel de Visão
+    // Geral), a RLS passou a deixar qualquer membro LER contas
+    // disponíveis de outras pessoas também — então filtramos aqui na
+    // tela mesmo, pra "Minhas contas" continuar mostrando só as
+    // próprias contas de quem não é admin.
+    let query = supabase.from('products').select('id, game, title, price, status, created_by, media').order('created_at', { ascending: false })
+    if (!isAdmin) query = query.eq('created_by', user.id)
+
     const [{ data: prods }, { data: perfis }, { data: cats }] = await Promise.all([
-      supabase.from('products').select('id, game, title, price, status, created_by, media').order('created_at', { ascending: false }),
+      query,
       isAdmin ? supabase.from('profiles').select('id, full_name').order('full_name') : Promise.resolve({ data: [] }),
       supabase.from('categories').select('id, name').order('sort_order')
     ])
     setProdutos(prods || [])
     setMembros(perfis || [])
     setCategorias(cats || [])
-  }, [isAdmin])
+  }, [isAdmin, user?.id])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
