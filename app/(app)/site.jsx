@@ -1,14 +1,26 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '../../lib/supabase.js'
+import { base64ToArrayBuffer } from '../../lib/base64ToArrayBuffer.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 const BUCKET = 'product-images'
 
 export default function Site() {
-  const [secao, setSecao] = useState('menu') // 'menu' | 'configuracoes' | 'categorias' | 'categorias-pagina' | 'paginas' | 'menu-site'
+  const { user, isAdmin } = useAuth()
+  const [secao, setSecao] = useState('menu') // 'menu' | 'configuracoes' | 'categorias' | 'categorias-pagina' | 'paginas' | 'menu-site' | 'loja-pessoal'
+
+  const [membros, setMembros] = useState([])
+  const [alvoLojaId, setAlvoLojaId] = useState(null)
+  const [lojaForm, setLojaForm] = useState({ slug: '', display_name: '', titulo: '', logo_url: '', frases: '', banner_text: '', banner_video_url: '' })
+  const [carregandoLoja, setCarregandoLoja] = useState(false)
+  const [salvandoLoja, setSalvandoLoja] = useState(false)
+  const [enviandoLogoLoja, setEnviandoLogoLoja] = useState(false)
+  const [salvoLoja, setSalvoLoja] = useState(false)
 
   const [logoUrl, setLogoUrl] = useState('')
   const [rodape, setRodape] = useState({ rodape_texto: '' })
@@ -29,6 +41,11 @@ export default function Site() {
   const [categoriasPagina, setCategoriasPagina] = useState([])
   const [novaCategoriaPagina, setNovaCategoriaPagina] = useState('')
 
+  const [banners, setBanners] = useState([])
+  const [frasesRotativas, setFrasesRotativas] = useState('')
+  const [parceriasCategoriaId, setParceriasCategoriaId] = useState(null)
+  const [salvandoBanner, setSalvandoBanner] = useState(false)
+
   const [itensMenu, setItensMenu] = useState([])
   const [tipoNovoItem, setTipoNovoItem] = useState('pagina')
   const [novoItemPagina, setNovoItemPagina] = useState('')
@@ -38,7 +55,7 @@ export default function Site() {
 
   const load = useCallback(async () => {
     const [{ data: settings }, { data: pages }, { data: cats, error: catsError }, { data: subs, error: subsError }] = await Promise.all([
-      supabase.from('site_settings').select('logo_url, rodape_texto').single(),
+      supabase.from('site_settings').select('logo_url, rodape_texto, frases_rotativas, parcerias_categoria_id').single(),
       supabase.from('site_pages').select('*').order('sort_order'),
       supabase.from('categories').select('*').order('sort_order'),
       supabase.from('subcategories').select('*').order('sort_order')
@@ -62,7 +79,18 @@ export default function Site() {
       .select('*, site_pages(menu_label), page_categories(name)')
       .order('sort_order')
     setItensMenu(mi || [])
-  }, [])
+
+    const { data: bnrs } = await supabase.from('banner_slides').select('*').order('sort_order')
+    setBanners(bnrs || [])
+    setFrasesRotativas(settings?.frases_rotativas || '')
+    setParceriasCategoriaId(settings?.parcerias_categoria_id || null)
+
+    if (isAdmin) {
+      const { data: perfis } = await supabase.from('profiles').select('id, full_name').order('full_name')
+      setMembros(perfis || [])
+    }
+    setAlvoLojaId((atual) => atual || user?.id)
+  }, [isAdmin, user?.id])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
@@ -83,8 +111,8 @@ export default function Site() {
       const asset = resultado.assets[0]
       const extensao = (asset.uri.split('.').pop() || 'png').split('?')[0]
       const path = `logo/${Date.now()}.${extensao}`
-      const resposta = await fetch(asset.uri)
-      const arrayBuffer = await resposta.arrayBuffer()
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 })
+      const arrayBuffer = base64ToArrayBuffer(base64)
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
         contentType: asset.mimeType || 'image/png'
       })
@@ -124,8 +152,8 @@ export default function Site() {
       const asset = resultado.assets[0]
       const extensao = (asset.uri.split('.').pop() || 'jpg').split('?')[0]
       const path = `paginas/${Date.now()}.${extensao}`
-      const resposta = await fetch(asset.uri)
-      const arrayBuffer = await resposta.arrayBuffer()
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 })
+      const arrayBuffer = base64ToArrayBuffer(base64)
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
         contentType: asset.mimeType || 'image/jpeg'
       })
@@ -252,6 +280,146 @@ export default function Site() {
   async function excluirSubcategoria(id) {
     await supabase.from('subcategories').delete().eq('id', id)
     load()
+  }
+
+  async function escolherImagemGenerica() {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permissao.granted) {
+      Alert.alert('Precisamos de permissão para acessar suas fotos.')
+      return null
+    }
+    const resultado = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 })
+    if (resultado.canceled || !resultado.assets?.[0]) return null
+
+    const asset = resultado.assets[0]
+    const extensao = (asset.uri.split('.').pop() || 'jpg').split('?')[0]
+    const path = `icones/${Date.now()}.${extensao}`
+    const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 })
+    const arrayBuffer = base64ToArrayBuffer(base64)
+    const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
+      contentType: asset.mimeType || 'image/jpeg'
+    })
+    if (error) {
+      Alert.alert('Não foi possível enviar a imagem', error.message)
+      return null
+    }
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+    return data.publicUrl
+  }
+
+  useEffect(() => {
+    if (!alvoLojaId) return
+    setCarregandoLoja(true)
+    setSalvoLoja(false)
+    supabase
+      .from('seller_pages')
+      .select('*')
+      .eq('seller_id', alvoLojaId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setLojaForm({
+            slug: data.slug,
+            display_name: data.display_name,
+            titulo: data.titulo || '',
+            logo_url: data.logo_url || '',
+            frases: data.frases || '',
+            banner_text: data.banner_text || '',
+            banner_video_url: data.banner_video_url || ''
+          })
+        } else {
+          const nome = alvoLojaId === user?.id ? '' : membros.find((m) => m.id === alvoLojaId)?.full_name || ''
+          setLojaForm({ slug: '', display_name: nome, titulo: '', logo_url: '', frases: '', banner_text: '', banner_video_url: '' })
+        }
+        setCarregandoLoja(false)
+      })
+  }, [alvoLojaId])
+
+  async function enviarLogoLoja() {
+    setEnviandoLogoLoja(true)
+    const url = await escolherImagemGenerica()
+    setEnviandoLogoLoja(false)
+    if (!url) return
+    setLojaForm((f) => ({ ...f, logo_url: url }))
+  }
+
+  async function salvarLoja() {
+    if (!lojaForm.slug.trim() || !lojaForm.display_name.trim()) {
+      Alert.alert('Preenche pelo menos o link e o nome de exibição.')
+      return
+    }
+    setSalvandoLoja(true)
+    const slugLimpo = lojaForm.slug.trim().toLowerCase().replace(/\s+/g, '-')
+    const { error } = await supabase.from('seller_pages').upsert({
+      seller_id: alvoLojaId,
+      slug: slugLimpo,
+      display_name: lojaForm.display_name,
+      titulo: lojaForm.titulo || null,
+      logo_url: lojaForm.logo_url || null,
+      frases: lojaForm.frases || null,
+      banner_text: lojaForm.banner_text,
+      banner_video_url: lojaForm.banner_video_url
+    })
+    setSalvandoLoja(false)
+    if (error) {
+      Alert.alert('Não foi possível salvar', error.message.includes('duplicate') ? 'Esse link já está em uso, escolhe outro.' : error.message)
+      return
+    }
+    setLojaForm((f) => ({ ...f, slug: slugLimpo }))
+    setSalvoLoja(true)
+  }
+
+  async function definirImagemCategoria(categoria) {
+    const url = await escolherImagemGenerica()
+    if (!url) return
+    await supabase.from('categories').update({ image_url: url }).eq('id', categoria.id)
+    load()
+  }
+
+  async function definirImagemSubcategoria(sub) {
+    const url = await escolherImagemGenerica()
+    if (!url) return
+    await supabase.from('subcategories').update({ image_url: url }).eq('id', sub.id)
+    load()
+  }
+
+  async function adicionarBanner() {
+    const url = await escolherImagemGenerica()
+    if (!url) return
+    const { error } = await supabase.from('banner_slides').insert({ image_url: url, sort_order: banners.length })
+    if (error) {
+      Alert.alert('Não foi possível adicionar', error.message)
+      return
+    }
+    load()
+  }
+
+  async function moverBanner(index, direcao) {
+    const nova = [...banners]
+    const destino = index + direcao
+    if (destino < 0 || destino >= nova.length) return
+    ;[nova[index], nova[destino]] = [nova[destino], nova[index]]
+    setBanners(nova)
+    await Promise.all(nova.map((b, i) => supabase.from('banner_slides').update({ sort_order: i }).eq('id', b.id)))
+  }
+
+  async function excluirBanner(id) {
+    await supabase.from('banner_slides').delete().eq('id', id)
+    load()
+  }
+
+  async function salvarFrasesEParcerias() {
+    setSalvandoBanner(true)
+    const { error } = await supabase
+      .from('site_settings')
+      .update({ frases_rotativas: frasesRotativas || null, parcerias_categoria_id: parceriasCategoriaId })
+      .eq('id', true)
+    setSalvandoBanner(false)
+    if (error) {
+      Alert.alert('Não foi possível salvar', error.message)
+      return
+    }
+    Alert.alert('Salvo!')
   }
 
   async function criarCategoriaPagina() {
@@ -608,6 +776,188 @@ export default function Site() {
     )
   }
 
+  // ---------- Tela: Banner e Parcerias ----------
+  // ---------- Tela: Minha Loja (link pessoal do vendedor) ----------
+  if (secao === 'loja-pessoal') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <Cabecalho titulo="Minha Loja" />
+        <Text style={styles.hint}>
+          Configure o link pessoal que mostra só as suas contas — ex: reigames.com.br/{lojaForm.slug || 'seu-link'}
+        </Text>
+
+        {isAdmin && (
+          <>
+            <Text style={styles.label}>Editando a loja de</Text>
+            <View style={styles.chipsRow}>
+              <Pressable
+                onPress={() => setAlvoLojaId(user.id)}
+                style={[styles.chip, alvoLojaId === user.id && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, alvoLojaId === user.id && styles.chipTextActive]}>Você (admin)</Text>
+              </Pressable>
+              {membros.filter((m) => m.id !== user.id).map((m) => (
+                <Pressable
+                  key={m.id}
+                  onPress={() => setAlvoLojaId(m.id)}
+                  style={[styles.chip, alvoLojaId === m.id && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, alvoLojaId === m.id && styles.chipTextActive]}>{m.full_name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
+
+        {carregandoLoja ? (
+          <Text style={styles.hint}>Carregando...</Text>
+        ) : (
+          <>
+            <Text style={styles.label}>Link personalizado</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ color: '#8B93A7', fontSize: 13 }}>reigames.com.br/</Text>
+              <TextInput
+                style={[styles.input, { flex: 1, marginLeft: 4 }]}
+                value={lojaForm.slug}
+                onChangeText={(v) => setLojaForm({ ...lojaForm, slug: v })}
+                placeholder="nome-da-pessoa"
+                placeholderTextColor="#8B93A7"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <Text style={styles.label}>Nome de exibição (uso interno)</Text>
+            <TextInput
+              style={styles.input}
+              value={lojaForm.display_name}
+              onChangeText={(v) => setLojaForm({ ...lojaForm, display_name: v })}
+            />
+
+            <Text style={styles.label}>Título da loja</Text>
+            <TextInput
+              style={styles.input}
+              value={lojaForm.titulo}
+              onChangeText={(v) => setLojaForm({ ...lojaForm, titulo: v })}
+              placeholder="Ex: Loja da Mika"
+              placeholderTextColor="#8B93A7"
+            />
+            <Text style={styles.hint}>Esse é o título que aparece de verdade no topo da página.</Text>
+
+            <Text style={styles.label}>Logo (opcional)</Text>
+            {lojaForm.logo_url ? (
+              <Image source={{ uri: lojaForm.logo_url }} style={{ width: 64, height: 64, borderRadius: 32, marginBottom: 8 }} />
+            ) : null}
+            <Pressable style={styles.saveBtnSmall} onPress={enviarLogoLoja} disabled={enviandoLogoLoja}>
+              <Text style={styles.saveBtnText}>
+                {enviandoLogoLoja ? 'Enviando...' : lojaForm.logo_url ? 'Trocar logo' : 'Escolher logo'}
+              </Text>
+            </Pressable>
+            <Text style={styles.hint}>Aparece embaixo do título, em formato redondo.</Text>
+
+            <Text style={styles.label}>Frases (opcional)</Text>
+            <TextInput
+              style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+              multiline
+              value={lojaForm.frases}
+              onChangeText={(v) => setLojaForm({ ...lojaForm, frases: v })}
+              placeholder={'Entrega rápida\nContas com garantia'}
+              placeholderTextColor="#8B93A7"
+            />
+            <Text style={styles.hint}>Uma frase por linha — aparecem do lado da logo.</Text>
+
+            <Text style={styles.label}>Texto de destaque (opcional)</Text>
+            <TextInput
+              style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
+              multiline
+              value={lojaForm.banner_text}
+              onChangeText={(v) => setLojaForm({ ...lojaForm, banner_text: v })}
+            />
+
+            {salvoLoja && <Text style={{ color: '#3FB27F', marginTop: 10 }}>Salvo! O link já está no ar.</Text>}
+
+            <Pressable style={styles.saveBtn} onPress={salvarLoja} disabled={salvandoLoja}>
+              <Text style={styles.saveBtnText}>{salvandoLoja ? 'Salvando...' : 'Salvar loja'}</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
+    )
+  }
+
+  if (secao === 'banner') {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+        <Cabecalho titulo="Banner e Parcerias" />
+
+        <Text style={styles.title}>Banners do topo da home</Text>
+        <Text style={styles.hint}>As imagens giram automaticamente, na ordem daqui.</Text>
+
+        {banners.map((b, i) => (
+          <View key={b.id} style={styles.pageCard}>
+            <Image source={{ uri: b.image_url }} style={{ width: 60, height: 36, borderRadius: 6 }} resizeMode="cover" />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Pressable disabled={i === 0} onPress={() => moverBanner(i, -1)}>
+                <Text style={{ color: i === 0 ? '#2A2F3B' : '#8B93A7', fontSize: 16 }}>▲</Text>
+              </Pressable>
+              <Pressable disabled={i === banners.length - 1} onPress={() => moverBanner(i, 1)}>
+                <Text style={{ color: i === banners.length - 1 ? '#2A2F3B' : '#8B93A7', fontSize: 16 }}>▼</Text>
+              </Pressable>
+              <Pressable onPress={() => excluirBanner(b.id)}>
+                <Text style={{ color: '#E8562F' }}>Remover</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+
+        <Pressable style={styles.saveBtnSmall} onPress={adicionarBanner}>
+          <Text style={styles.saveBtnText}>+ Adicionar banner</Text>
+        </Pressable>
+
+        <View style={styles.divider} />
+
+        <Text style={styles.title}>Frases rotativas</Text>
+        <Text style={styles.hint}>Uma frase por linha — elas ficam girando embaixo do banner, na home.</Text>
+        <TextInput
+          style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+          multiline
+          value={frasesRotativas}
+          onChangeText={setFrasesRotativas}
+          placeholder={'REI GAMES 🎮\nCompra 100% segura'}
+          placeholderTextColor="#8B93A7"
+        />
+
+        <View style={styles.divider} />
+
+        <Text style={styles.title}>Seção "Parcerias" na home</Text>
+        <Text style={styles.hint}>
+          Escolha uma categoria de página pra usar como "Parcerias" (mostra as páginas dela com imagem
+          redonda, tipo Mineirinha, Mika, Pedrosa).
+        </Text>
+        <View style={styles.chipsRow}>
+          <Pressable
+            onPress={() => setParceriasCategoriaId(null)}
+            style={[styles.chip, !parceriasCategoriaId && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, !parceriasCategoriaId && styles.chipTextActive]}>Nenhuma</Text>
+          </Pressable>
+          {categoriasPagina.map((c) => (
+            <Pressable
+              key={c.id}
+              onPress={() => setParceriasCategoriaId(c.id)}
+              style={[styles.chip, parceriasCategoriaId === c.id && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, parceriasCategoriaId === c.id && styles.chipTextActive]}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Pressable style={styles.saveBtnSmall} onPress={salvarFrasesEParcerias} disabled={salvandoBanner}>
+          <Text style={styles.saveBtnText}>{salvandoBanner ? 'Salvando...' : 'Salvar frases e parcerias'}</Text>
+        </Pressable>
+      </ScrollView>
+    )
+  }
+
   // ---------- Tela: Categorias e subcategorias (contas) ----------
   if (secao === 'categorias') {
     return (
@@ -636,11 +986,21 @@ export default function Site() {
               style={styles.categoriaHeader}
               onPress={() => setCategoriaAberta(categoriaAberta === cat.id ? null : cat.id)}
             >
-              <Text style={styles.categoriaNome}>{cat.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {cat.image_url ? (
+                  <Image source={{ uri: cat.image_url }} style={styles.iconeRedondo} />
+                ) : (
+                  <View style={[styles.iconeRedondo, styles.iconeRedondoVazio]} />
+                )}
+                <Text style={styles.categoriaNome}>{cat.name}</Text>
+              </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                 <Text style={{ color: '#8B93A7', fontSize: 12 }}>
                   {(subcategoriasPorCategoria[cat.id] || []).length} subcategoria(s)
                 </Text>
+                <Pressable onPress={() => definirImagemCategoria(cat)}>
+                  <Ionicons name="camera-outline" size={20} color="#E7B94C" />
+                </Pressable>
                 <Pressable onPress={() => excluirCategoria(cat)}>
                   <Text style={{ color: '#E8562F' }}>Apagar</Text>
                 </Pressable>
@@ -651,10 +1011,22 @@ export default function Site() {
               <View style={styles.subcategoriaArea}>
                 {(subcategoriasPorCategoria[cat.id] || []).map((sub) => (
                   <View key={sub.id} style={styles.subcategoriaLinha}>
-                    <Text style={{ color: '#FFFFFF' }}>{sub.name}</Text>
-                    <Pressable onPress={() => excluirSubcategoria(sub.id)}>
-                      <Text style={{ color: '#E8562F', fontSize: 12 }}>Remover</Text>
-                    </Pressable>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {sub.image_url ? (
+                        <Image source={{ uri: sub.image_url }} style={styles.iconeRedondoPequeno} />
+                      ) : (
+                        <View style={[styles.iconeRedondoPequeno, styles.iconeRedondoVazio]} />
+                      )}
+                      <Text style={{ color: '#FFFFFF' }}>{sub.name}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <Pressable onPress={() => definirImagemSubcategoria(sub)}>
+                        <Ionicons name="camera-outline" size={18} color="#E7B94C" />
+                      </Pressable>
+                      <Pressable onPress={() => excluirSubcategoria(sub.id)}>
+                        <Text style={{ color: '#E8562F', fontSize: 12 }}>Remover</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ))}
                 <View style={styles.addRow}>
@@ -722,6 +1094,22 @@ export default function Site() {
         <View style={styles.menuItemEsquerda}>
           <Ionicons name="list-outline" size={22} color="#E7B94C" />
           <Text style={styles.menuItemTexto}>Menu do site</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('loja-pessoal')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="storefront-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Minha Loja</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
+      </Pressable>
+
+      <Pressable style={styles.menuItem} onPress={() => setSecao('banner')}>
+        <View style={styles.menuItemEsquerda}>
+          <Ionicons name="images-outline" size={22} color="#E7B94C" />
+          <Text style={styles.menuItemTexto}>Banner e Parcerias</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color="#8B93A7" />
       </Pressable>
@@ -797,5 +1185,8 @@ const styles = StyleSheet.create({
   menuItemEsquerda: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   menuItemTexto: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   voltarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 2 },
-  voltarTexto: { color: '#E7B94C', fontSize: 18, fontWeight: '700' }
+  voltarTexto: { color: '#E7B94C', fontSize: 18, fontWeight: '700' },
+  iconeRedondo: { width: 32, height: 32, borderRadius: 16 },
+  iconeRedondoPequeno: { width: 24, height: 24, borderRadius: 12 },
+  iconeRedondoVazio: { backgroundColor: '#2A2F3B' }
 })

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { base64ToArrayBuffer } from '../lib/base64ToArrayBuffer.js'
 
 const STATUS = ['disponivel', 'reservado', 'vendido', 'oculto']
 const BUCKET = 'product-images'
@@ -16,7 +18,7 @@ export default function ProdutoForm({ id }) {
   const [categorias, setCategorias] = useState([])
   const [subcategorias, setSubcategorias] = useState([])
   const [form, setForm] = useState({
-    game: '', category_id: '', subcategory: '', title: '', description: '', price: '', cost: '', status: 'disponivel'
+    game: '', category_id: '', subcategory: '', title: '', description: '', price: '', compare_price: '', cost: '', status: 'disponivel'
   })
   const [itens, setItens] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -42,6 +44,7 @@ export default function ProdutoForm({ id }) {
             title: data.title,
             description: data.description,
             price: String(data.price),
+            compare_price: data.compare_price != null ? String(data.compare_price) : '',
             cost: data.cost != null ? String(data.cost) : '',
             status: data.status
           })
@@ -64,7 +67,7 @@ export default function ProdutoForm({ id }) {
       .from('subcategories')
       .select('*')
       .eq('category_id', form.category_id)
-      .order('sort_order')
+      .order('sort_order', { ascending: false })
       .then(({ data, error }) => {
         if (error) Alert.alert('Erro ao carregar subcategorias', error.message)
         setSubcategorias(data || [])
@@ -78,7 +81,7 @@ export default function ProdutoForm({ id }) {
       return
     }
     const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       allowsMultipleSelection: true,
       quality: 0.8
     })
@@ -126,8 +129,8 @@ export default function ProdutoForm({ id }) {
         } else {
           const extensao = (item.asset.uri.split('.').pop() || (item.type === 'video' ? 'mp4' : 'jpg')).split('?')[0]
           const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extensao}`
-          const resposta = await fetch(item.asset.uri)
-          const arrayBuffer = await resposta.arrayBuffer()
+          const base64 = await FileSystem.readAsStringAsync(item.asset.uri, { encoding: FileSystem.EncodingType.Base64 })
+          const arrayBuffer = base64ToArrayBuffer(base64)
           const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
             contentType: item.asset.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
           })
@@ -139,7 +142,8 @@ export default function ProdutoForm({ id }) {
 
       const payload = {
         game: form.game, subcategory: form.subcategory || null, title: form.title, description: form.description,
-        price: Number(form.price), cost: form.cost ? Number(form.cost) : null, status: form.status,
+        price: Number(form.price), compare_price: form.compare_price ? Number(form.compare_price) : null,
+        cost: form.cost ? Number(form.cost) : null, status: form.status,
         media: mediaFinal
       }
       const { error } = isEditing
@@ -210,6 +214,17 @@ export default function ProdutoForm({ id }) {
         value={form.description}
         onChangeText={(v) => setForm({ ...form, description: v })}
       />
+
+      <Text style={styles.label}>Preço de comparação (opcional)</Text>
+      <TextInput
+        style={styles.input}
+        keyboardType="decimal-pad"
+        value={form.compare_price}
+        onChangeText={(v) => setForm({ ...form, compare_price: v })}
+        placeholderTextColor="#8B93A7"
+        placeholder="Ex: 800.00"
+      />
+      <Text style={styles.hint}>Preço "de", riscado — mostra o desconto (% OFF) no site. Deixe vazio pra não mostrar.</Text>
 
       <Text style={styles.label}>Preço (R$)</Text>
       <TextInput style={styles.input} keyboardType="decimal-pad" value={form.price} onChangeText={(v) => setForm({ ...form, price: v })} />
