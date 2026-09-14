@@ -12,14 +12,12 @@
     },
     "android": {
       "package": "br.com.reigames.tt",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F1115"
       },
-      "permissions": [
-        "android.permission.NOTIFICATIONS",
-        "android.permission.RECORD_AUDIO"
-      ]
+      "permissions": ["NOTIFICATIONS"]
     },
     "plugins": [
       [
@@ -38,9 +36,8 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "b04dfe0e-bc0a-4731-8e7f-253dfb98b71f"
+        "projectId": "COLOQUE-AQUI-O-ID-GERADO-PELO-EAS"
       }
-    },
-    "owner": "haryel1"
+    }
   }
 }

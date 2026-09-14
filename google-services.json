@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "397005645910",
+    "project_id": "app-rei-games-v2",
+    "storage_bucket": "app-rei-games-v2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:397005645910:android:f6117550f1b3f2cae173f7",
+        "android_client_info": {
+          "package_name": "br.com.reigames.tt"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAn_oRuAFhbsiQX5Mu-avNMQu1W9acTOb0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
