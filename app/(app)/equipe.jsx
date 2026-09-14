@@ -45,15 +45,24 @@ function PainelMembro({ membro, onFechar, onAtualizado }) {
     setProcessando(true)
     try {
       const { data: sessao } = await supabase.auth.getSession()
-      const { data, error } = await supabase.functions.invoke('manage-team-member', {
-        body: { action, memberId: membro.id, ...extra },
-        headers: { Authorization: `Bearer ${sessao.session.access_token}` }
+      const resposta = await fetch(`${supabase.supabaseUrl}/functions/v1/manage-team-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessao.session.access_token}`,
+          apikey: supabase.supabaseKey
+        },
+        body: JSON.stringify({ action, memberId: membro.id, ...extra })
       })
-      if (error || data?.error) {
-        Alert.alert('Não foi possível concluir', data?.error || error?.message || 'Tente novamente.')
+      const corpo = await resposta.json().catch(() => null)
+      if (!resposta.ok) {
+        Alert.alert('Não foi possível concluir', corpo?.error || `Erro ${resposta.status} ao processar.`)
         return false
       }
       return true
+    } catch (err) {
+      Alert.alert('Erro de conexão', err.message)
+      return false
     } finally {
       setProcessando(false)
     }
