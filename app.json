@@ -7,9 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "tt-reigames",
-    "splash": {
-      "backgroundColor": "#0F1115"
-    },
     "android": {
       "package": "br.com.reigames.tt",
       "googleServicesFile": "./google-services.json",

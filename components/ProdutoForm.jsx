@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
 import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -74,6 +75,25 @@ export default function ProdutoForm({ id }) {
       })
   }, [form.category_id])
 
+  // Corta a foto pro centro, num quadrado, e redimensiona pra no máximo
+  // 1080x1080 — assim toda conta fica com o mesmo padrão, não importa o
+  // formato original da foto que cada pessoa da equipe mandar.
+  async function recortarQuadrado(asset) {
+    const lado = Math.min(asset.width, asset.height)
+    const originX = (asset.width - lado) / 2
+    const originY = (asset.height - lado) / 2
+    const tamanhoFinal = Math.min(1080, lado)
+    const resultado = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [
+        { crop: { originX, originY, width: lado, height: lado } },
+        { resize: { width: tamanhoFinal, height: tamanhoFinal } }
+      ],
+      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+    )
+    return resultado.uri
+  }
+
   async function escolherMidia() {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permissao.granted) {
@@ -86,14 +106,27 @@ export default function ProdutoForm({ id }) {
       quality: 0.8
     })
     if (!resultado.canceled) {
-      const novos = resultado.assets.map((asset) => ({
-        id: `novo-${Date.now()}-${Math.random()}`,
-        kind: 'novo',
-        type: asset.type === 'video' ? 'video' : 'image',
-        asset,
-        url: asset.uri
-      }))
-      setItens((prev) => [...prev, ...novos])
+      for (const asset of resultado.assets) {
+        const ehVideo = asset.type === 'video'
+        let uriFinal = asset.uri
+        let mimeFinal = asset.mimeType
+        if (!ehVideo) {
+          try {
+            uriFinal = await recortarQuadrado(asset)
+            mimeFinal = 'image/jpeg'
+          } catch {
+            // se der algum problema no recorte, usa a foto original mesmo
+          }
+        }
+        const item = {
+          id: `novo-${Date.now()}-${Math.random()}`,
+          kind: 'novo',
+          type: ehVideo ? 'video' : 'image',
+          asset: { ...asset, uri: uriFinal, mimeType: mimeFinal },
+          url: uriFinal
+        }
+        setItens((prev) => [...prev, item])
+      }
     }
   }
 
@@ -150,13 +183,37 @@ export default function ProdutoForm({ id }) {
         ? await supabase.from('products').update(payload).eq('id', id)
         : await supabase.from('products').insert({ ...payload, created_by: user.id })
       if (error) throw error
-      router.replace('/produtos')
+      router.back()
     } catch (err) {
       Alert.alert('Não foi possível salvar', 'Verifique os campos e tente de novo.')
     } finally {
       setSalvando(false)
       setEnviandoMidia(false)
     }
+  }
+
+  async function excluirConta() {
+    Alert.alert(
+      'Excluir conta',
+      'Tem certeza que quer excluir essa conta do catálogo? As fotos/vídeos dela também são apagados. Isso não pode ser desfeito.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            const paths = itens.filter((i) => i.kind === 'existente').map((i) => i.path)
+            if (paths.length) await supabase.storage.from(BUCKET).remove(paths)
+            const { error } = await supabase.from('products').delete().eq('id', id)
+            if (error) {
+              Alert.alert('Não foi possível excluir', error.message)
+              return
+            }
+            router.back()
+          }
+        }
+      ]
+    )
   }
 
   if (carregando) return <View style={styles.screen} />
@@ -281,6 +338,12 @@ export default function ProdutoForm({ id }) {
           {enviandoMidia ? 'Enviando mídia...' : salvando ? 'Salvando...' : 'Salvar conta'}
         </Text>
       </Pressable>
+
+      {isEditing && (
+        <Pressable style={styles.deleteBtn} onPress={excluirConta}>
+          <Text style={styles.deleteBtnText}>Excluir conta</Text>
+        </Pressable>
+      )}
     </ScrollView>
   )
 }
@@ -309,5 +372,7 @@ const styles = StyleSheet.create({
   moverDesabilitado: { color: '#2A2F3B' },
   addMidiaBtn: { width: 84, height: 84, borderRadius: 8, borderWidth: 1, borderColor: '#E7B94C', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   saveBtn: { backgroundColor: '#E7B94C', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 28, marginBottom: 40 },
+  deleteBtn: { borderColor: '#E8562F', borderWidth: 1, borderRadius: 8, padding: 14, alignItems: 'center', marginTop: -20, marginBottom: 40 },
+  deleteBtnText: { color: '#E8562F', fontWeight: '700' },
   saveBtnText: { color: '#0F1115', fontWeight: '700', fontSize: 16 }
 })

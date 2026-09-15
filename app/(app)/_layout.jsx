@@ -37,11 +37,9 @@ export default function AppLayout() {
       <Tabs.Screen name="pedidos/index" options={{ title: 'Pedidos', tabBarIcon: icone('receipt-outline') }} />
       <Tabs.Screen name="pedidos/[id]" options={{ href: null, title: 'Pedido' }} />
       <Tabs.Screen
-        name="produtos/index"
-        options={{ title: isAdmin ? 'Contas' : 'Minhas contas', tabBarIcon: icone('game-controller-outline') }}
+        name="produtos"
+        options={{ title: isAdmin ? 'Contas' : 'Minhas contas', headerShown: false, tabBarIcon: icone('game-controller-outline') }}
       />
-      <Tabs.Screen name="produtos/novo" options={{ href: null, title: 'Nova conta' }} />
-      <Tabs.Screen name="produtos/[id]" options={{ href: null, title: 'Editar conta' }} />
       <Tabs.Screen
         name="equipe"
         options={{ href: isAdmin ? undefined : null, title: 'Equipe', tabBarIcon: icone('people-outline') }}
