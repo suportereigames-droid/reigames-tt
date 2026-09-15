@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, Image } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
-import * as ImageManipulator from 'expo-image-manipulator'
 import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -75,25 +74,6 @@ export default function ProdutoForm({ id }) {
       })
   }, [form.category_id])
 
-  // Corta a foto pro centro, num quadrado, e redimensiona pra no máximo
-  // 1080x1080 — assim toda conta fica com o mesmo padrão, não importa o
-  // formato original da foto que cada pessoa da equipe mandar.
-  async function recortarQuadrado(asset) {
-    const lado = Math.min(asset.width, asset.height)
-    const originX = (asset.width - lado) / 2
-    const originY = (asset.height - lado) / 2
-    const tamanhoFinal = Math.min(1080, lado)
-    const resultado = await ImageManipulator.manipulateAsync(
-      asset.uri,
-      [
-        { crop: { originX, originY, width: lado, height: lado } },
-        { resize: { width: tamanhoFinal, height: tamanhoFinal } }
-      ],
-      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
-    )
-    return resultado.uri
-  }
-
   async function escolherMidia() {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permissao.granted) {
@@ -106,27 +86,14 @@ export default function ProdutoForm({ id }) {
       quality: 0.8
     })
     if (!resultado.canceled) {
-      for (const asset of resultado.assets) {
-        const ehVideo = asset.type === 'video'
-        let uriFinal = asset.uri
-        let mimeFinal = asset.mimeType
-        if (!ehVideo) {
-          try {
-            uriFinal = await recortarQuadrado(asset)
-            mimeFinal = 'image/jpeg'
-          } catch {
-            // se der algum problema no recorte, usa a foto original mesmo
-          }
-        }
-        const item = {
-          id: `novo-${Date.now()}-${Math.random()}`,
-          kind: 'novo',
-          type: ehVideo ? 'video' : 'image',
-          asset: { ...asset, uri: uriFinal, mimeType: mimeFinal },
-          url: uriFinal
-        }
-        setItens((prev) => [...prev, item])
-      }
+      const novos = resultado.assets.map((asset) => ({
+        id: `novo-${Date.now()}-${Math.random()}`,
+        kind: 'novo',
+        type: asset.type === 'video' ? 'video' : 'image',
+        asset,
+        url: asset.uri
+      }))
+      setItens((prev) => [...prev, ...novos])
     }
   }
 
